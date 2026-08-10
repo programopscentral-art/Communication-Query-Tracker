@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAllowedEmail } from "@/lib/constants";
@@ -16,8 +17,13 @@ export function hasAdminAccess(u: AppUser): boolean {
   return u.role === "admin" || u.can_view_admin;
 }
 
-/** Require a signed-in, domain-valid user. Redirects to /login otherwise. */
-export async function requireAppUser(): Promise<AppUser> {
+/**
+ * Require a signed-in, domain-valid user. Redirects to /login otherwise.
+ * Wrapped in React cache() so the layout + page (which both call this during
+ * one render) share a SINGLE getUser + app_users round-trip instead of doubling
+ * them — a big latency win on every navigation.
+ */
+export const requireAppUser = cache(async (): Promise<AppUser> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -41,7 +47,7 @@ export async function requireAppUser(): Promise<AppUser> {
     full_name: appUser?.full_name ?? null,
     can_view_admin: appUser?.can_view_admin ?? false,
   };
-}
+});
 
 /** Require Admin-console access (a real admin, or a staff member the admin
  *  explicitly granted access). Redirects everyone else to their landing. */

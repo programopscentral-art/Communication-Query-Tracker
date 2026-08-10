@@ -44,12 +44,6 @@ export default async function UniversityBoard({
     .single();
   if (!uni) notFound();
 
-  const { data: prefs } = await supabase
-    .from("reminder_prefs")
-    .select("offsets_min, auto_enabled")
-    .eq("university_id", uni.id)
-    .maybeSingle();
-
   const { gte, lt } = istWindow(view);
   let q = supabase
     .from("tasks")
@@ -59,7 +53,12 @@ export default async function UniversityBoard({
   if (gte) q = q.gte("publish_at", gte);
   if (lt) q = q.lt("publish_at", lt);
   if (view === "overdue") q = q.in("execution_status", ["pending", "in_progress"]);
-  const { data } = await q.limit(500);
+
+  // prefs + tasks in parallel (both only need uni.id) — one round-trip, not two
+  const [{ data: prefs }, { data }] = await Promise.all([
+    supabase.from("reminder_prefs").select("offsets_min, auto_enabled").eq("university_id", uni.id).maybeSingle(),
+    q.limit(500),
+  ]);
   const tasks = (data ?? []) as Task[];
 
   return (
