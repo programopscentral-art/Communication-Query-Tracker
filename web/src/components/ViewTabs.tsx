@@ -4,9 +4,20 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { VIEW_TABS, VIEW_DROPDOWN, type ViewKey } from "@/lib/time";
 
-/** Yesterday / Today / Upcoming tabs + a dropdown for extra ranges.
- *  Drives the `?view=` param → server re-renders the filtered window. */
-export function ViewTabs({ current }: { current: ViewKey }) {
+type Tab = { key: ViewKey; label: string };
+
+/** Segmented time tabs + a dropdown for extra ranges. Drives the `?view=` param.
+ *  Tabs/dropdown are configurable so different pages (board vs reminders) can
+ *  show their own set (e.g. Today/Tomorrow/Upcoming for reminders). */
+export function ViewTabs({
+  current,
+  tabs = VIEW_TABS,
+  dropdown = VIEW_DROPDOWN,
+}: {
+  current: ViewKey;
+  tabs?: Tab[];
+  dropdown?: Tab[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -14,16 +25,18 @@ export function ViewTabs({ current }: { current: ViewKey }) {
   function go(view: ViewKey) {
     const p = new URLSearchParams(params.toString());
     p.set("view", view);
+    p.delete("date"); // switching to a range clears an active date search
     router.push(`${pathname}?${p.toString()}`);
   }
 
-  const inTabs = VIEW_TABS.some((t) => t.key === current);
+  const dateActive = !!params.get("date");
+  const inTabs = !dateActive && tabs.some((t) => t.key === current);
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex rounded-full border border-line bg-surface p-1">
-        {VIEW_TABS.map((t) => {
-          const active = current === t.key;
+        {tabs.map((t) => {
+          const active = !dateActive && current === t.key;
           return (
             <button
               key={t.key}
@@ -46,12 +59,12 @@ export function ViewTabs({ current }: { current: ViewKey }) {
       </div>
 
       <select
-        value={inTabs ? "" : current}
+        value={inTabs ? "" : dateActive ? "" : current}
         onChange={(e) => e.target.value && go(e.target.value as ViewKey)}
         className="filter-input"
       >
         <option value="">More ranges…</option>
-        {VIEW_DROPDOWN.map((d) => (
+        {dropdown.map((d) => (
           <option key={d.key} value={d.key}>
             {d.label}
           </option>
