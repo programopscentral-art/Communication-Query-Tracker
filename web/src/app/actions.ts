@@ -92,7 +92,28 @@ export async function postInternalMessage(formData: FormData) {
 }
 
 // ── Staff (BOA) management — admin only ──────────────────────────────────────
-export async function createStaff(formData: FormData) {
+export type StaffFormState = { error?: string };
+
+/** Turn a Postgres/Supabase error into a clear, human message for the admin. */
+function friendlyDbError(e: { code?: string; message?: string; details?: string }): string {
+  const blob = `${e.message ?? ""} ${e.details ?? ""}`.toLowerCase();
+  if (e.code === "23505" || blob.includes("duplicate key")) {
+    if (blob.includes("whatsapp")) return "That WhatsApp number is already assigned to another staff member.";
+    if (blob.includes("employee_id")) return "That Employee ID already exists.";
+    return "A staff member with these details already exists.";
+  }
+  if (blob.includes("whatsapp_e164_format") || blob.includes("check constraint")) {
+    return "WhatsApp number must be valid E.164 (e.g. +919876543210) — no spaces or dashes.";
+  }
+  return e.message || "Could not save. Please check the details and try again.";
+}
+
+// useActionState-compatible: (prevState, formData) → state. Returns an error to
+// show inline instead of throwing (which would white-screen the page).
+export async function createStaff(
+  _prev: StaffFormState,
+  formData: FormData,
+): Promise<StaffFormState> {
   await requireAdmin();
   const supabase = await createClient();
 
@@ -108,7 +129,7 @@ export async function createStaff(formData: FormData) {
     })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) return { error: friendlyDbError(error) };
 
   if (universityId) {
     const { error: aerr } = await supabase.from("university_boas").insert({
@@ -118,7 +139,11 @@ export async function createStaff(formData: FormData) {
       team_scope: s(formData, "team_scope"),
       receive_reminders: formData.get("receive_reminders") === "on",
     });
-    if (aerr) throw new Error(aerr.message);
+    // Roll back the orphan boa if the assignment failed, then report.
+    if (aerr) {
+      await supabase.from("boas").delete().eq("id", boa.id);
+      return { error: friendlyDbError(aerr) };
+    }
   }
   revalidatePath("/admin/staff");
   redirect(`/admin/staff/${boa.id}`);
