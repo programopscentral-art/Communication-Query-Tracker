@@ -3,6 +3,7 @@ import { requireUniversityAccess, hasAdminAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TopNav } from "@/components/TopNav";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
+import { Footer } from "@/components/Footer";
 
 export default async function UniversityLayout({
   children,
@@ -34,7 +35,7 @@ export default async function UniversityLayout({
   ]);
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen flex-col">
       <TopNav
         home={`/u/${code}`}
         email={user.email}
@@ -58,7 +59,8 @@ export default async function UniversityLayout({
         }
         announcements={anns ?? []}
       />
-      {children}
+      <main className="flex-1">{children}</main>
+      <Footer />
     </div>
   );
 }

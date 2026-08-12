@@ -49,12 +49,9 @@ export function TopNav({
               {backTo.label}
             </Link>
           )}
-          <Link href={home} className="flex items-center gap-2.5">
+          <Link href={home} className="flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/niat-logo.svg" alt="NIAT" className="h-9 w-auto" />
-            <span className="hidden font-ui text-sm font-semibold tracking-tight text-ink sm:block">
-              Comm<span className="text-accent">·</span>Tracker
-            </span>
+            <img src="/niat-logo.png" alt="NIAT — NxtWave of Innovation in Advanced Technologies" className="h-8 w-auto" />
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">

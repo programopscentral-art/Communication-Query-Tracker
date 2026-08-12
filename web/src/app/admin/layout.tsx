@@ -1,10 +1,11 @@
 import { requireAdmin } from "@/lib/auth";
 import { TopNav } from "@/components/TopNav";
+import { Footer } from "@/components/Footer";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAdmin();
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen flex-col">
       <TopNav
         home="/admin"
         email={user.email}
@@ -22,7 +23,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: "/admin/comms", label: "Comms" },
         ]}
       />
-      {children}
+      <main className="flex-1">{children}</main>
+      <Footer />
     </div>
   );
 }

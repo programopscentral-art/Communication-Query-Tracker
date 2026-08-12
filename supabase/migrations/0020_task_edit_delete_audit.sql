@@ -64,3 +64,4 @@ drop trigger if exists audit_task_delete_trg on tasks;
 create trigger audit_task_delete_trg
   after delete on tasks
   for each row execute function audit_task_delete();
+
