@@ -15,7 +15,7 @@ const grotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Communication Query Tracker",
+  title: "PingBoard",
   description: "High-velocity communication scheduling & reminders for university BOAs.",
 };
 

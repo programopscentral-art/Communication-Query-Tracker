@@ -8,7 +8,7 @@ export function Footer() {
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/niat-logo.png" alt="NIAT — NxtWave of Innovation in Advanced Technologies" className="h-10 w-auto" />
-            <p className="mt-3 font-ui text-sm font-semibold text-ink">Communication Query Tracker</p>
+            <p className="mt-3 font-ui text-sm font-semibold text-ink">PingBoard</p>
             <p className="mt-1 max-w-xs text-sm leading-relaxed text-muted">
               WhatsApp reminders that reach every BOA on time — across every university.
             </p>
@@ -36,7 +36,7 @@ export function Footer() {
         <div className="mt-8 flex flex-col items-center justify-between gap-2 border-t border-line-soft pt-6 sm:flex-row">
           <p className="font-ui text-xs text-muted">© {year} NxtWave · NIAT — Internal use only.</p>
           <p className="font-ui text-xs text-muted">
-            Communication Query Tracker <span className="text-line">·</span> v1.0
+            PingBoard <span className="text-line">·</span> v1.0
           </p>
         </div>
       </div>
