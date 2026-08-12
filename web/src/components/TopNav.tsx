@@ -50,9 +50,8 @@ export function TopNav({
             </Link>
           )}
           <Link href={home} className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-ink font-ui text-sm font-bold text-white">
-              C<span className="text-accent">T</span>
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/niat-logo.svg" alt="NIAT" className="h-9 w-auto" />
             <span className="hidden font-ui text-sm font-semibold tracking-tight text-ink sm:block">
               Comm<span className="text-accent">·</span>Tracker
             </span>

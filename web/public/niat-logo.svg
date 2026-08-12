@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" role="img" aria-label="NIAT">
+  <!-- shield -->
+  <path d="M12 8 Q12 6 14 6 L86 6 Q88 6 88 8 L88 66 Q88 92 50 114 Q12 92 12 66 Z" fill="#7a0016"/>
+  <!-- inner border -->
+  <path d="M18 13 Q18 12 19 12 L81 12 Q82 12 82 13 L82 65 Q82 88 50 107 Q18 88 18 65 Z"
+        fill="none" stroke="#f4ece0" stroke-width="2"/>
+  <!-- quadrant cross -->
+  <line x1="50" y1="14" x2="50" y2="105" stroke="#f4ece0" stroke-width="2.4"/>
+  <line x1="20" y1="60" x2="80" y2="60" stroke="#f4ece0" stroke-width="2.4"/>
+  <!-- letters -->
+  <g fill="#f4ece0" font-family="Georgia, 'Times New Roman', serif" font-weight="700"
+     font-size="26" text-anchor="middle" dominant-baseline="central">
+    <text x="34" y="38">N</text>
+    <text x="66" y="38">I</text>
+    <text x="34" y="82">A</text>
+    <text x="66" y="82">T</text>
+  </g>
+</svg>

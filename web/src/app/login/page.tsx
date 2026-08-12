@@ -19,9 +19,8 @@ export default async function LoginPage() {
       <Reveal className="relative w-full max-w-sm">
         <div className="card p-8">
           <div className="mb-7 text-center">
-            <span className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-2xl bg-ink font-ui text-lg font-bold text-white">
-              C<span className="text-accent">T</span>
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/niat-logo.svg" alt="NIAT" className="mx-auto mb-5 h-14 w-auto" />
             <p className="eyebrow mb-2">Communication Query Tracker</p>
             <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
               Welcome back
