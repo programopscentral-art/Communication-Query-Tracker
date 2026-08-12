@@ -49,10 +49,13 @@ export function TopNav({
               {backTo.label}
             </Link>
           )}
-          <Link href={home} className="flex items-center gap-2.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/niat-logo.png" alt="NIAT — NxtWave of Innovation in Advanced Technologies" className="h-8 w-auto" />
-            <span className="hidden font-ui text-sm font-semibold tracking-tight text-ink sm:block">PingBoard</span>
+          <Link href={home} className="flex items-center gap-2">
+            {/* Show only the shield (clip the wide logo) so the nav stays compact */}
+            <span className="block h-9 w-9 shrink-0 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/niat-logo.png" alt="NIAT" className="h-9 max-w-none" />
+            </span>
+            <span className="font-ui text-base font-extrabold tracking-tight text-ink">PingBoard</span>
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">
