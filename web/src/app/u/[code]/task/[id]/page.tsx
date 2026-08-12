@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAppUser } from "@/lib/auth";
+import { requireAppUser, hasAdminAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { fmtIST } from "@/lib/format";
 import { StatusBadge, PriorityBadge } from "@/components/Badges";
@@ -8,12 +8,14 @@ import { updateTask } from "@/app/actions";
 import { Reveal } from "@/components/ui/Reveal";
 import { SendNowButton } from "@/components/SendNowButton";
 import { ViewInSheet } from "@/components/ViewInSheet";
+import { DeleteTaskButton } from "@/components/DeleteTaskButton";
 
 const STATUS_OPTIONS = ["pending", "in_progress", "published", "blocked", "restricted"];
 
 export default async function TaskDetail({ params }: { params: Promise<{ code: string; id: string }> }) {
   const { code, id } = await params;
-  await requireAppUser();
+  const user = await requireAppUser();
+  const canEdit = hasAdminAccess(user);
   const supabase = await createClient();
 
   const { data: task } = await supabase
@@ -28,9 +30,22 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <Reveal>
-        <Link href={`/u/${code}`} className="font-ui text-sm text-accent hover:underline">
-          ← {uni?.name ?? "Board"}
-        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <Link href={`/u/${code}`} className="font-ui text-sm text-accent hover:underline">
+            ← {uni?.name ?? "Board"}
+          </Link>
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/u/${code}/task/${id}/edit`}
+                className="rounded-full border border-line px-4 py-2 font-ui text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+              >
+                Edit
+              </Link>
+              <DeleteTaskButton taskId={task.id} code={code} />
+            </div>
+          )}
+        </div>
 
         <div className="mt-4 card p-6 sm:p-8">
           <div className="mb-5 flex flex-wrap items-center gap-2">

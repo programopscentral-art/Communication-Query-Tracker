@@ -5,8 +5,40 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireAppUser, requireAdmin } from "@/lib/auth";
+import { runSheetSync } from "@/lib/sheetSync";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+
+// ── Sync now: pull the Google Sheet on demand (admin, Sheet mode only) ───────
+export type SyncState = { error?: string; message?: string };
+
+export async function syncSheetNow(_prev: SyncState, _fd: FormData): Promise<SyncState> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const { data: settings } = await supabase.from("app_settings").select("data_source_mode").eq("id", 1).single();
+  if (settings?.data_source_mode !== "sheet") {
+    return { error: "Sync is only allowed in Sheet mode. Switch the data source to Google Sheet first." };
+  }
+
+  try {
+    const r = await runSheetSync(supabase);
+    revalidatePath("/admin/data-source");
+    revalidatePath("/admin/schedule");
+    revalidatePath("/admin");
+    const parts: string[] = [];
+    if (r.inserted) parts.push(`${r.inserted} new`);
+    if (r.updated) parts.push(`${r.updated} status update${r.updated === 1 ? "" : "s"}`);
+    if (r.created) parts.push(`${r.created} new universit${r.created === 1 ? "y" : "ies"}`);
+    return {
+      message: parts.length
+        ? `Synced ✓ — ${parts.join(", ")} (${r.scanned} rows scanned).`
+        : `Up to date ✓ — nothing changed (${r.scanned} rows scanned).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Sync failed." };
+  }
+}
 
 /** BOA (or admin) updates a task's execution progress. RLS enforces access. */
 export async function updateTask(formData: FormData) {
@@ -73,6 +105,51 @@ export async function sendReminderNow(taskId: string, code: string): Promise<num
 
   revalidatePath(`/u/${code}/task/${taskId}`);
   return (data as number) ?? 0;
+}
+
+/** Admin-only full content edit of a task. Keeps source_key stable so a later
+ *  sheet sync won't re-insert the row as a duplicate. */
+export async function updateTaskFull(formData: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(formData, "task_id");
+  const code = s(formData, "code");
+
+  const patch = {
+    university_id: s(formData, "university_id") || undefined,
+    team: s(formData, "team") || null,
+    update_type: s(formData, "update_type") || null,
+    category: s(formData, "category") || null,
+    priority: s(formData, "priority") || "Normal",
+    channel: s(formData, "channel") || null,
+    content_type: s(formData, "content_type") || null,
+    target_audience: s(formData, "target_audience") || null,
+    message_content: s(formData, "message_content") || null,
+    poster_drive_link: s(formData, "poster_drive_link") || null,
+    publish_at: istLocalToUTC(s(formData, "publish_at") || null),
+    special_instructions: s(formData, "special_instructions") || null,
+  };
+  const { error } = await supabase.from("tasks").update(patch).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/u/${code}/task/${id}`);
+  revalidatePath(`/u/${code}`);
+  redirect(`/u/${code}/task/${id}`);
+}
+
+/** Admin-only delete of a task (cascades its reminders; audited). */
+export async function deleteTask(formData: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(formData, "task_id");
+  const code = s(formData, "code");
+
+  const { error } = await supabase.from("tasks").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/u/${code}`);
+  revalidatePath("/admin/schedule");
+  redirect(`/u/${code}`);
 }
 
 /** Admin posts an internal (admin-only) message. */

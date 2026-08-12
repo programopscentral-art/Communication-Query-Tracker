@@ -2,6 +2,10 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { setDataSourceMode } from "@/app/actions";
 import { Reveal } from "@/components/ui/Reveal";
+import { SyncNowButton } from "./SyncNowButton";
+
+// Give the on-demand sync headroom (first full pull can take a while).
+export const maxDuration = 60;
 
 export default async function DataSource() {
   await requireAdmin();
@@ -35,6 +39,7 @@ export default async function DataSource() {
             desc="The tracker sheet is the source of truth. Imports sync Sheet → app. On a duplicate, the Sheet version wins."
             count={sheetCount ?? 0}
             countLabel="sheet-sourced entries"
+            footer={mode === "sheet" ? <SyncNowButton /> : null}
           />
           <ModeCard
             active={mode === "ui"}
@@ -71,6 +76,7 @@ function ModeCard({
   desc,
   count,
   countLabel,
+  footer,
 }: {
   active: boolean;
   mode: "sheet" | "ui";
@@ -79,6 +85,7 @@ function ModeCard({
   desc: string;
   count: number;
   countLabel: string;
+  footer?: React.ReactNode;
 }) {
   return (
     <div className={`card p-6 transition-all ${active ? "ring-2 ring-accent" : "opacity-90"}`}>
@@ -99,6 +106,7 @@ function ModeCard({
           </button>
         </form>
       )}
+      {footer}
     </div>
   );
 }

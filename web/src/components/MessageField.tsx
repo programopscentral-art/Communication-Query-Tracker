@@ -3,8 +3,8 @@
 import { useState } from "react";
 
 /** Message/Content textarea with a live word counter (target 70+ words). */
-export function MessageField({ name }: { name: string }) {
-  const [val, setVal] = useState("");
+export function MessageField({ name, defaultValue = "" }: { name: string; defaultValue?: string }) {
+  const [val, setVal] = useState(defaultValue);
   const words = val.trim() ? val.trim().split(/\s+/).length : 0;
   const ok = words >= 70;
   return (

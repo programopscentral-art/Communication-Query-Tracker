@@ -21,6 +21,12 @@ export function telLink(e164: string): string {
   return `tel:${e164}`;
 }
 
+/** UTC ISO → "YYYY-MM-DDTHH:MM" in IST, for <input type="datetime-local"> defaults. */
+export function utcToIstLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return new Date(new Date(iso).getTime() + 330 * 60000).toISOString().slice(0, 16);
+}
+
 export const STATUS_LABEL: Record<string, string> = {
   pending: "Pending",
   in_progress: "In Progress",
