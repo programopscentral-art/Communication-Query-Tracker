@@ -32,7 +32,7 @@ Secret **values** live only in git-ignored files + the Supabase/Vercel dashboard
 
 ## Google resources
 
-- **Tracker data sheet** (tasks): `1W6qHfLOP-moOd3sDEHuqRgrzTP6jdUTvLPOYho4AWOo`, tab **"Communication"** (gid `116249373`), ~6.9k rows.
+- **Tracker data sheet** (tasks): `16-e4LMiOMZxMenVMrDAIDBX651j4MxEJN3y2WihjUeg` (the communication team's **official** live sheet — replaced the earlier `1W6qHfLOP…` copy on 2026-08-13), tab **"Communication"** (gid `116249373`), ~7.3k rows.
 - **Staff sheet** (BOAs): `1ip-V2pQmqUhsmcctpLUhuQW6I4f_iWkBVz9v0pXu2MY`.
 - **Google OAuth client** lives in Google Cloud project `communication-query-tracker`; redirect URI = `https://<ref>.supabase.co/auth/v1/callback`. Supabase → Auth → URL config must list the Vercel + localhost URLs.
 
