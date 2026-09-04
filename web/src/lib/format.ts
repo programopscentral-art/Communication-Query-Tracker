@@ -21,6 +21,26 @@ export function telLink(e164: string): string {
   return `tel:${e164}`;
 }
 
+/**
+ * Normalize a typed phone to +E.164 (bare 10-digit / 0- / 91- prefixed → +91).
+ * Mirrors scripts/import-staff.mjs so UI-entered staff match the DB check
+ * constraint (whatsapp_e164_format). Returns null if it can't be made valid.
+ */
+export function toE164(raw: string | null | undefined): string | null {
+  const s = (raw ?? "").toString().trim();
+  if (!s) return null;
+  if (s.startsWith("+")) {
+    const d = "+" + s.slice(1).replace(/\D/g, "");
+    return /^\+[1-9]\d{7,14}$/.test(d) ? d : null;
+  }
+  const d = s.replace(/\D/g, "");
+  if (d.length === 10) return "+91" + d;
+  if (d.length === 11 && d.startsWith("0")) return "+91" + d.slice(1);
+  if (d.length === 12 && d.startsWith("91")) return "+" + d;
+  if (d.length >= 8 && d.length <= 15) return "+" + d;
+  return null;
+}
+
 /** UTC ISO → "YYYY-MM-DDTHH:MM" in IST, for <input type="datetime-local"> defaults. */
 export function utcToIstLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";

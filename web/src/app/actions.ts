@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireAppUser, requireAdmin } from "@/lib/auth";
 import { runSheetSync } from "@/lib/sheetSync";
+import { toE164 } from "@/lib/format";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
@@ -195,13 +196,17 @@ export async function createStaff(
   const supabase = await createClient();
 
   const universityId = s(formData, "university_id");
+  const phone = toE164(s(formData, "whatsapp_e164"));
+  if (!phone) {
+    return { error: "Enter a valid WhatsApp number — a 10-digit Indian mobile or a full +country-code number." };
+  }
   const { data: boa, error } = await supabase
     .from("boas")
     .insert({
       employee_id: s(formData, "employee_id"),
       name: s(formData, "name"),
       designation: s(formData, "designation") || null,
-      whatsapp_e164: s(formData, "whatsapp_e164"),
+      whatsapp_e164: phone,
       email: s(formData, "email") || null,
     })
     .select("id")
@@ -230,18 +235,49 @@ export async function updateStaff(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
   const id = s(formData, "boa_id");
+  const phone = toE164(s(formData, "whatsapp_e164"));
+  if (!phone) {
+    throw new Error("Enter a valid WhatsApp number — a 10-digit Indian mobile or a full +country-code number.");
+  }
   const { error } = await supabase
     .from("boas")
     .update({
       name: s(formData, "name"),
       designation: s(formData, "designation") || null,
-      whatsapp_e164: s(formData, "whatsapp_e164"),
+      whatsapp_e164: phone,
       email: s(formData, "email") || null,
       active: formData.get("active") === "on",
     })
     .eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyDbError(error));
   revalidatePath(`/admin/staff/${id}`);
+  revalidatePath("/admin/staff");
+}
+
+/** Quick soft toggle from the directory — deactivate/reactivate a BOA.
+ *  Deactivating stops future reminders (eligibility checks `active`) and the
+ *  0017 trigger regenerates jobs; it preserves all history. */
+export async function setStaffActive(formData: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(formData, "boa_id");
+  const active = s(formData, "active") === "true";
+  const { error } = await supabase.from("boas").update({ active }).eq("id", id);
+  if (error) throw new Error(friendlyDbError(error));
+  revalidatePath("/admin/staff");
+  revalidatePath(`/admin/staff/${id}`);
+}
+
+/** Permanent delete of a BOA. FK cascade removes their assignments and
+ *  reminder_jobs; any linked login (app_users.boa_id) is set null (that person
+ *  keeps their account but loses the staff link until re-added by email). */
+export async function deleteStaff(formData: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(formData, "boa_id");
+  const { error } = await supabase.from("boas").delete().eq("id", id);
+  if (error) throw new Error(friendlyDbError(error));
+  revalidatePath("/admin/staff");
 }
 
 export async function upsertAssignment(formData: FormData) {

@@ -7,6 +7,7 @@ import { UniSelect } from "@/components/UniSelect";
 import { waLink, telLink } from "@/lib/format";
 import { StaffTabs } from "@/components/StaffTabs";
 import { ViewInSheet } from "@/components/ViewInSheet";
+import { StaffRowActions } from "@/components/StaffRowActions";
 
 const STAFF_SHEET_ID = process.env.NEXT_PUBLIC_STAFF_SHEET_ID;
 
@@ -33,14 +34,18 @@ export default async function StaffDirectory({
   const sp = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: unis }, { data: counts }, { data: rows }] = await Promise.all([
+  const [{ data: unis }, { data: counts }, { data: rows }, { data: accounts }] = await Promise.all([
     supabase.from("universities").select("id, name, code").order("name"),
     supabase.from("v_university_history").select("university, code, staff_count").order("staff_count", { ascending: false }),
     supabase
       .from("boas")
       .select("id, name, employee_id, designation, whatsapp_e164, email, active, source_gid, source_row, university_boas(role, team_scope, universities(name, code))")
       .order("name"),
+    supabase.from("app_users").select("boa_id").not("boa_id", "is", null),
   ]);
+
+  // BOAs that have a linked login account (so delete warns before delinking them).
+  const linked = new Set<string>((accounts ?? []).map((a) => (a as { boa_id: string }).boa_id));
 
   let staff = (rows ?? []) as unknown as Staff[];
   if (sp.uni) staff = staff.filter((s) => s.university_boas.some((a) => a.universities?.code === sp.uni));
@@ -93,6 +98,7 @@ export default async function StaffDirectory({
                   <th className="px-4 py-3">Universities</th>
                   <th className="px-4 py-3">Contact</th>
                   <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line-soft">
@@ -128,10 +134,18 @@ export default async function StaffDirectory({
                         <ViewInSheet compact sheetId={STAFF_SHEET_ID} gid={st.source_gid} row={st.source_row} />
                       </div>
                     </td>
+                    <td className="px-6 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/admin/staff/${st.id}`} className="rounded-full border border-line px-3 py-1.5 font-ui text-xs font-semibold text-muted transition-colors hover:border-accent hover:text-accent">
+                          Edit
+                        </Link>
+                        <StaffRowActions boaId={st.id} name={st.name} active={st.active} hasAccount={linked.has(st.id)} />
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {staff.length === 0 && (
-                  <tr><td colSpan={5} className="px-6 py-12 text-center text-muted">
+                  <tr><td colSpan={6} className="px-6 py-12 text-center text-muted">
                     No staff yet. Click <b>Add staff</b> or run the BOA sheet sync.
                   </td></tr>
                 )}

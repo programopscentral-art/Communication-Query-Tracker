@@ -63,7 +63,7 @@ export function NewStaffForm({ unis }: { unis: { id: string; name: string }[] })
       >
         {pending ? "Creating…" : "Create staff"}
       </button>
-      <p className="text-xs text-muted">WhatsApp must be a valid <b className="text-ink">+91…</b> number (no spaces/dashes) and unique to this person.</p>
+      <p className="text-xs text-muted">Enter a <b className="text-ink">10-digit mobile</b> (auto-prefixed to +91) or a full <b className="text-ink">+country-code</b> number. Must be unique to this person.</p>
     </form>
   );
 }
