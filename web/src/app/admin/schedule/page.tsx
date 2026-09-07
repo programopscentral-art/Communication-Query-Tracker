@@ -2,31 +2,34 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { fmtIST } from "@/lib/format";
-import { istWindow, isViewKey, type ViewKey } from "@/lib/time";
+import { istWindow, dateWindow, isViewKey, type ViewKey } from "@/lib/time";
 import { StatusBadge, PriorityBadge } from "@/components/Badges";
 import { Reveal } from "@/components/ui/Reveal";
 import { ViewTabs } from "@/components/ViewTabs";
 import { UniSelect } from "@/components/UniSelect";
+import { DateSearch } from "@/components/DateSearch";
 import { ViewInSheet } from "@/components/ViewInSheet";
 
 export default async function AdminSchedule({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; uni?: string }>;
+  searchParams: Promise<{ view?: string; uni?: string; date?: string }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
   const view: ViewKey = isViewKey(sp.view) ? sp.view : "today";
+  // A specific date (?date=YYYY-MM-DD) overrides the range tabs.
+  const dateActive = !!sp.date;
   const supabase = await createClient();
 
   const { data: unis } = await supabase.from("universities").select("id, name, code").order("name");
   const uniByCode = new Map((unis ?? []).map((u) => [u.code, u.id as string]));
 
-  const { gte, lt } = istWindow(view);
+  const { gte, lt } = dateActive ? dateWindow(sp.date!) : istWindow(view);
   let q = supabase
     .from("tasks")
     .select("id, priority, channel, content_type, team, publish_at, execution_status, source_gid, source_row, universities(name, code)", { count: "exact" })
-    .order("publish_at", { ascending: view !== "yesterday", nullsFirst: false });
+    .order("publish_at", { ascending: dateActive ? true : view !== "yesterday", nullsFirst: false });
   if (gte) q = q.gte("publish_at", gte);
   if (lt) q = q.lt("publish_at", lt);
   if (view === "overdue") q = q.in("execution_status", ["pending", "in_progress"]);
@@ -51,12 +54,13 @@ export default async function AdminSchedule({
       <Reveal delay={0.06} className="mt-6 flex flex-wrap items-center gap-3">
         <ViewTabs current={view} />
         <UniSelect options={unis ?? []} current={sp.uni ?? ""} />
+        <DateSearch />
       </Reveal>
 
       <Reveal delay={0.1} className="mt-6">
         {tasks.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line px-4 py-12 text-center text-sm text-muted">
-            No tasks scheduled in this window.
+            {dateActive ? "No tasks scheduled on that date." : "No tasks scheduled in this window."}
           </p>
         ) : (
           <div className="space-y-2">

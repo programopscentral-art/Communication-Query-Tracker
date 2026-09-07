@@ -2,8 +2,10 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { fmtIST } from "@/lib/format";
+import { dateWindow } from "@/lib/time";
 import { describeChange, type Changes } from "@/lib/activity";
 import { Reveal } from "@/components/ui/Reveal";
+import { DateSearch } from "@/components/DateSearch";
 
 type URow = {
   university_id: string;
@@ -28,13 +30,31 @@ type Activity = {
   channel: string | null;
 };
 
-export default async function HistoryHome() {
+export default async function HistoryHome({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   await requireAdmin();
+  const sp = await searchParams;
+  const dateActive = !!sp.date;
   const supabase = await createClient();
+
+  // The date picker filters the audit/activity feed to a specific IST day; the
+  // university rollup on the left is cumulative, so it's left unaffected.
+  let actsQ = supabase.from("v_recent_activity").select("*").order("created_at", { ascending: false });
+  if (dateActive) {
+    const w = dateWindow(sp.date!);
+    if (w.gte) actsQ = actsQ.gte("created_at", w.gte);
+    if (w.lt) actsQ = actsQ.lt("created_at", w.lt);
+    actsQ = actsQ.limit(200);
+  } else {
+    actsQ = actsQ.limit(25);
+  }
 
   const [{ data: unis }, { data: acts }] = await Promise.all([
     supabase.from("v_university_history").select("*").order("last_task_update", { ascending: false, nullsFirst: false }),
-    supabase.from("v_recent_activity").select("*").order("created_at", { ascending: false }).limit(25),
+    actsQ,
   ]);
 
   const universities = (unis ?? []) as URow[];
@@ -50,6 +70,11 @@ export default async function HistoryHome() {
         <p className="mt-2 font-ui text-sm text-muted">
           Track every university&apos;s progress and every staff member&apos;s updates over time.
         </p>
+      </Reveal>
+
+      <Reveal delay={0.04} className="mt-5 flex flex-wrap items-center gap-3">
+        <DateSearch />
+        {dateActive && <span className="font-ui text-xs text-muted">Showing activity for {sp.date}</span>}
       </Reveal>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
@@ -97,7 +122,7 @@ export default async function HistoryHome() {
         {/* recent activity feed */}
         <Reveal delay={0.1}>
           <div className="card p-5">
-            <h2 className="mb-4 font-ui text-sm font-semibold text-ink">Recent activity</h2>
+            <h2 className="mb-4 font-ui text-sm font-semibold text-ink">{dateActive ? `Activity on ${sp.date}` : "Recent activity"}</h2>
             <ActivityFeed items={activity} showUni />
           </div>
         </Reveal>

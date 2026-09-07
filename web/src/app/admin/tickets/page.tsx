@@ -2,9 +2,10 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { updateTicketStatus, assignTicket } from "@/app/actions";
 import { fmtIST } from "@/lib/format";
-import { istWindow, isViewKey, type ViewKey } from "@/lib/time";
+import { istWindow, dateWindow, isViewKey, type ViewKey } from "@/lib/time";
 import { Reveal } from "@/components/ui/Reveal";
 import { ViewTabs } from "@/components/ViewTabs";
+import { DateSearch } from "@/components/DateSearch";
 
 type Ticket = {
   id: string;
@@ -30,13 +31,15 @@ const STATUS_TONE: Record<string, string> = {
   closed: "bg-line-soft text-muted",
 };
 
-export default async function AdminTickets({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+export default async function AdminTickets({ searchParams }: { searchParams: Promise<{ view?: string; date?: string }> }) {
   await requireAdmin();
   const sp = await searchParams;
   const view: ViewKey = isViewKey(sp.view) ? sp.view : "all";
+  // A specific date (?date=YYYY-MM-DD) filters by when the ticket was raised.
+  const dateActive = !!sp.date;
   const supabase = await createClient();
 
-  const { gte, lt } = istWindow(view);
+  const { gte, lt } = dateActive ? dateWindow(sp.date!) : istWindow(view);
   let q = supabase
     .from("tickets")
     .select("id, subject, description, status, priority, tags, link, created_at, raised_by_name, assigned_to, assigned_to_name, universities(name)")
@@ -63,8 +66,9 @@ export default async function AdminTickets({ searchParams }: { searchParams: Pro
         </div>
       </Reveal>
 
-      <Reveal delay={0.05} className="mt-6">
+      <Reveal delay={0.05} className="mt-6 flex flex-wrap items-center gap-3">
         <ViewTabs current={view} />
+        <DateSearch />
       </Reveal>
 
       <div className="mt-4 space-y-3">
@@ -122,7 +126,9 @@ export default async function AdminTickets({ searchParams }: { searchParams: Pro
           </div>
         ))}
         {tickets.length === 0 && (
-          <p className="card px-5 py-12 text-center text-sm text-muted">No tickets in this window.</p>
+          <p className="card px-5 py-12 text-center text-sm text-muted">
+            {dateActive ? "No tickets raised on that date." : "No tickets in this window."}
+          </p>
         )}
       </div>
     </div>
