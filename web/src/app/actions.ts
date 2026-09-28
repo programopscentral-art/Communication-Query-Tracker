@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireAppUser, requireAdmin } from "@/lib/auth";
-import { runSheetSync } from "@/lib/sheetSync";
+import { runSheetSync, describeSync, recordSyncStatus } from "@/lib/sheetSync";
 import { toE164 } from "@/lib/format";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -24,20 +24,17 @@ export async function syncSheetNow(_prev: SyncState, _fd: FormData): Promise<Syn
 
   try {
     const r = await runSheetSync(supabase);
+    const message = describeSync(r);
+    await recordSyncStatus(supabase, "manual", true, message);
     revalidatePath("/admin/data-source");
     revalidatePath("/admin/schedule");
     revalidatePath("/admin");
-    const parts: string[] = [];
-    if (r.inserted) parts.push(`${r.inserted} new`);
-    if (r.updated) parts.push(`${r.updated} status update${r.updated === 1 ? "" : "s"}`);
-    if (r.created) parts.push(`${r.created} new universit${r.created === 1 ? "y" : "ies"}`);
-    return {
-      message: parts.length
-        ? `Synced ✓ — ${parts.join(", ")} (${r.scanned} rows scanned).`
-        : `Up to date ✓ — nothing changed (${r.scanned} rows scanned).`,
-    };
+    return { message };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Sync failed." };
+    const message = e instanceof Error ? e.message : "Sync failed.";
+    await recordSyncStatus(supabase, "manual", false, message);
+    revalidatePath("/admin/data-source");
+    return { error: message };
   }
 }
 

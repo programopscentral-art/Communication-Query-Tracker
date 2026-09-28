@@ -28,7 +28,7 @@ Secret **values** live only in git-ignored files + the Supabase/Vercel dashboard
 - `web/.env.local` — `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SHEET_ID`, `NEXT_PUBLIC_STAFF_SHEET_ID`
 - root `.env` — above + `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`, `GOOGLE_SHEET_ID`, `GOOGLE_STAFF_SHEET_ID`, `WHATSAPP_PROVIDER`
 - ⚠️ The service_role key + DB password were pasted into chat during setup — **rotate them in the Supabase dashboard before/after go-live**, then update local `.env` + Vercel env.
-- Vercel env (Production) needs the 4 `NEXT_PUBLIC_*` vars. The web app does **not** need the service_role key.
+- Vercel env (Production) needs the 4 `NEXT_PUBLIC_*` vars, plus **server-only** `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET` for the scheduled sheet sync (`/api/cron/sync-sheet`). Never give these a `NEXT_PUBLIC_` prefix. `CRON_SECRET` also lives in root `.env`, `web/.env.local`, and Supabase Vault (`pingboard_cron_secret`, set by `node scripts/set-cron-secret.mjs`).
 
 ## Google resources
 
@@ -74,7 +74,7 @@ docs/                    SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_INTAKE_
 - RPCs: `existing_task_source_keys`, `existing_task_sync_state`, `enqueue_manual_reminder`, `university_quick_stats`, `claim_due_reminders`, `generate_reminder_jobs`, …
 
 ### Migrations (0001–0020, applied to live DB)
-0001 schema · 0002 auth(domain-lock trigger) · 0003 RLS · 0004 reminder engine · 0005 seed(18 unis + dropdowns) · 0006 views · 0007 reminder_prefs+precedence+manual-send · 0008 history(audit trigger+views) · 0009 tickets+announcements · 0010 admin_view_access(can_view_admin) · 0011 sheet_refs(source_row/gid on tasks) · 0012 staff_directory(app_users.email, co-worker RLS, boas sheet refs) · 0013 ui_authoring(ref tables, priority→text, data_source_mode, origin) · 0014 ticket_meta(raiser/assignee) · 0015 autolink_boa(link app_users↔boas by email) · 0016 reminder_view fire_at · 0017 regen_on_assignment(generate reminders when staff assigned) · 0018 existing_keys_rpc · 0019 sync_state_rpc · 0020 task_edit_delete_audit.
+0001 schema · 0002 auth(domain-lock trigger) · 0003 RLS · 0004 reminder engine · 0005 seed(18 unis + dropdowns) · 0006 views · 0007 reminder_prefs+precedence+manual-send · 0008 history(audit trigger+views) · 0009 tickets+announcements · 0010 admin_view_access(can_view_admin) · 0011 sheet_refs(source_row/gid on tasks) · 0012 staff_directory(app_users.email, co-worker RLS, boas sheet refs) · 0013 ui_authoring(ref tables, priority→text, data_source_mode, origin) · 0014 ticket_meta(raiser/assignee) · 0015 autolink_boa(link app_users↔boas by email) · 0016 reminder_view fire_at · 0017 regen_on_assignment(generate reminders when staff assigned) · 0018 existing_keys_rpc · 0019 sync_state_rpc · 0020 task_edit_delete_audit · 0021 sheet_auto_sync (`task_sheet_state` memory table + backfill, sync-state RPC allows service_role, `app_settings.last_sheet_sync_*`) · 0022 schedule_sheet_sync (pg_cron + pg_net job; apply only **after** deploy + Vercel env + Vault secret).
 
 **Apply a migration:** PowerShell → `node --input-type=module -e "import {connect} from './scripts/db.mjs'; import {readFileSync} from 'node:fs'; const c=await connect(); await c.query(readFileSync('supabase/migrations/00XX_*.sql','utf8')); await c.end();"` (or `npm run db:push` for all). Migrations were applied directly to the live DB throughout; `supabase db push`/CLI link was never used (no access token).
 
@@ -99,6 +99,10 @@ docs/                    SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_INTAKE_
 - **Source tab** (`/admin/data-source`) toggles `data_source_mode`: **sheet** (import authoritative, Sheet wins on dup) or **ui** (author in-app, import paused).
 - **Sync now** button (Sheet mode only) → server action `syncSheetNow` → `web/src/lib/sheetSync.ts`: fetches the sheet, dedups by **`source_key`** = `sha1(uniName|publish_at|channel|content_type|message[:120])`, **inserts only new rows**, **updates status/actual/issue on existing rows** (Sheet wins), drops UI duplicates. Never overwrites other content of existing rows; keeps it fast (delta only).
 - Editing key fields in the sheet makes a **new** row (new source_key); editing non-key/non-outcome fields on existing rows is **not** synced (use UI mode / the in-app Edit for that).
+- **Only the "Communication" tab is read** (every other subsheet ignored). If its University header is renamed (it was overwritten as a 2nd "Priority" in Sep 2026), the column is detected by **content**. Missing tab/columns → a loud error, never a silent fallback.
+- **Auto-sync:** Supabase `pg_cron` (0022) hits `GET /api/cron/sync-sheet` with `Authorization: Bearer $CRON_SECRET` every 10 min (Vercel Hobby cron is daily-only). The route uses the service-role client (`lib/supabase/admin.ts`), skips in UI mode, and records `last_sheet_sync_*` (shown on the Source tab). `/api/cron` is excluded from the login redirect in `lib/supabase/middleware.ts`.
+- **Three-way outcome merge** (`outcomePatch` in `sheetSync.ts`): `task_sheet_state` remembers what the sheet last showed per row; a sheet value is applied only if the **sheet** changed since the last run, so a BOA's in-app status/blocker update is not reverted. Both changed → sheet wins.
+- Parse cost: xlsx is read with `sheets: "Communication", dense: true` (~2.2 s CPU/run). **Don't switch to CSV export**: its `\n` line breaks differ from xlsx `\r\n`, which changes 676 source_keys → duplicates.
 - **View in Sheet** deep-links (`…/edit#gid=<source_gid>&range=A<source_row>`) — needs `NEXT_PUBLIC_SHEET_ID`.
 - Bulk load scripts: `node scripts/import-tracker.mjs --commit`, `node scripts/import-staff.mjs --commit` (idempotent; staff keyed by employee_id; phones normalized to +91).
 
@@ -140,7 +144,7 @@ Prefer a throwaway script under `scripts/_*.mjs` run via PowerShell: simulate th
 ## Outstanding / TODO (not done yet)
 
 1. **WhatsApp go-live** — provider (Meta/BSP) + approved template + schedule the 1-min cron (`docs/REMINDER_ENGINE.md`). Currently mock.
-2. **Scheduled auto-sync** — so the sheet flows in without clicking Sync now (currently manual button / CLI).
+2. **Scheduled auto-sync** — built (0021 applied). Go-live: set `SUPABASE_SERVICE_ROLE_KEY` + `CRON_SECRET` in Vercel, deploy, `node scripts/set-cron-secret.mjs`, then apply 0022.
 3. **Vercel Hobby → Pro** before real rollout (ToS + usage caps + cold starts).
 4. **Rotate** the exposed Supabase service_role key + DB password.
 5. Fill WhatsApp numbers for the 4 skipped staff, then re-run staff import.

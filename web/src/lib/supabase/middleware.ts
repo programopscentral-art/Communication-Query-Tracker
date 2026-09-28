@@ -2,8 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAllowedEmail } from "@/lib/constants";
 
-/** Public routes reachable without a session. */
-const PUBLIC_PATHS = ["/login", "/auth", "/blocked"];
+/** Public routes reachable without a session. `/api/cron` has no user session
+ *  (it's called by the scheduler) and authorizes itself with CRON_SECRET. */
+const PUBLIC_PATHS = ["/login", "/auth", "/blocked", "/api/cron"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

@@ -57,7 +57,7 @@ const H = {
   update_type: ["Update Type"],
   category: ["Category"],
   priority: ["Priority"],
-  university: ["University", "Univeristy"],
+  university: ["University", "Univeristy", "Target Uni", "College"],
   channel: ["Channel"],
   content_type: ["Content Type"],
   target_audience: ["Target Audience"],
@@ -75,6 +75,27 @@ function colIndex(header, names) {
     if (i >= 0) return i;
   }
   return -1;
+}
+
+// Only this tab is ever imported — every other subsheet is ignored.
+const DATA_TAB = "communication";
+
+// If the University header was renamed/overwritten, find the column by content.
+function detectUniversityCol(grid, hi, isUni) {
+  const sample = grid.slice(hi + 1, hi + 501);
+  const width = Math.max(0, ...sample.map((r) => r.length));
+  let best = -1, bestHits = 0;
+  for (let c = 0; c < width; c++) {
+    let filled = 0, hits = 0;
+    for (const row of sample) {
+      const v = norm(row[c]);
+      if (!v) continue;
+      filled++;
+      if (isUni(v)) hits++;
+    }
+    if (filled && hits / filled > 0.6 && hits > bestHits) { best = c; bestHits = hits; }
+  }
+  return best;
 }
 
 async function main() {
@@ -140,15 +161,21 @@ async function main() {
   // Known noise values seen in the sheet that must never become universities.
   const SKIP_UNI = new Set(["", "high", "normal", "critical", "grand total", "university"]);
 
-  for (const sheetName of wb.SheetNames) {
+  const sheetName = wb.SheetNames.find((n) => lower(n) === DATA_TAB);
+  if (!sheetName) { console.error('❌ No "Communication" tab in the sheet.'); process.exit(3); }
+  {
     const grid = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: false, defval: "" });
     // find header row (contains "Entry Date")
     const hi = grid.findIndex((r) => r.some((c) => lower(c) === "entry date"));
-    if (hi < 0) { console.log(`  · skip tab "${sheetName}" (no data header)`); continue; }
+    if (hi < 0) { console.error(`❌ No "Entry Date" header row in "${sheetName}".`); process.exit(3); }
     const header = grid[hi].map(norm);
     const idx = {};
     for (const [k, names] of Object.entries(H)) idx[k] = colIndex(header, names);
-    if (idx.university < 0 || idx.publish_at < 0) { console.log(`  · skip tab "${sheetName}" (missing cols)`); continue; }
+    if (idx.university < 0) {
+      idx.university = detectUniversityCol(grid, hi, (v) => uniMap.has(lower(v)) || /yen[ae]poya/.test(lower(v)));
+      console.log(`  ⚠ University header not found — detected by content at column ${idx.university}`);
+    }
+    if (idx.university < 0 || idx.publish_at < 0) { console.error(`❌ "${sheetName}" missing University/Publish At column.`); process.exit(3); }
 
     let tabCount = 0;
     for (let r = hi + 1; r < grid.length; r++) {
@@ -184,22 +211,11 @@ async function main() {
         .createHash("sha1")
         .update([uniRaw, rec.publish_at, rec.channel, rec.content_type, (msg || "").slice(0, 120)].join("|"))
         .digest("hex");
-      rec.__tab = sheetName;
       parsed.push(rec);
       tabCount++;
     }
-    console.log(`  · tab "${sheetName}": ${tabCount} rows`);
+    console.log(`  · tab "${sheetName}": ${tabCount} rows (all other tabs ignored)`);
   }
-
-  // Keep only the dominant data tab (avoids importing derived/snapshot tabs
-  // like a per-university "Detail" copy). Future multi-tab sheets: adjust here.
-  const perTab = {};
-  for (const p of parsed) perTab[p.__tab] = (perTab[p.__tab] || 0) + 1;
-  const primaryTab = Object.entries(perTab).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const kept = parsed.filter((p) => p.__tab === primaryTab);
-  console.log(`\nPrimary data tab: "${primaryTab}" → ${kept.length} rows (dropped ${parsed.length - kept.length} from other tabs)`);
-  parsed.length = 0;
-  parsed.push(...kept);
 
   console.log(`\nParsed ${parsed.length} rows (skipped ${skipped} blanks).`);
   const byStatus = {};

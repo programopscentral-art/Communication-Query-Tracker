@@ -10,8 +10,20 @@ export const maxDuration = 60;
 export default async function DataSource() {
   await requireAdmin();
   const supabase = await createClient();
-  const { data } = await supabase.from("app_settings").select("data_source_mode").eq("id", 1).single();
+  const { data } = await supabase
+    .from("app_settings")
+    .select("data_source_mode, last_sheet_sync_at, last_sheet_sync_ok, last_sheet_sync_message, last_sheet_sync_source")
+    .eq("id", 1)
+    .single();
   const mode = (data?.data_source_mode as "sheet" | "ui") ?? "sheet";
+  const last = data?.last_sheet_sync_at
+    ? {
+        at: data.last_sheet_sync_at as string,
+        ok: data.last_sheet_sync_ok as boolean,
+        message: (data.last_sheet_sync_message as string) ?? "",
+        source: (data.last_sheet_sync_source as string) ?? "manual",
+      }
+    : null;
 
   const [{ count: uiCount }, { count: sheetCount }] = await Promise.all([
     supabase.from("tasks").select("*", { count: "exact", head: true }).eq("origin", "ui"),
@@ -39,7 +51,12 @@ export default async function DataSource() {
             desc="The tracker sheet is the source of truth. Imports sync Sheet → app. On a duplicate, the Sheet version wins."
             count={sheetCount ?? 0}
             countLabel="sheet-sourced entries"
-            footer={mode === "sheet" ? <SyncNowButton /> : null}
+            footer={mode === "sheet" ? (
+              <>
+                <SyncStatus last={last} />
+                <SyncNowButton />
+              </>
+            ) : null}
           />
           <ModeCard
             active={mode === "ui"}
@@ -59,11 +76,45 @@ export default async function DataSource() {
           <ul className="space-y-2 font-ui text-sm text-muted">
             <li>• Both writers save into the same table, so every screen always shows one merged, live view.</li>
             <li>• <b className="text-ink">Duplicate rule:</b> if the same entry exists from both Sheet and UI, the <b className="text-ink">Sheet copy wins</b> — the UI duplicate is dropped on import (matched by content signature).</li>
-            <li>• <b className="text-ink">Status edits are safe:</b> re-importing the Sheet never overwrites a BOA&apos;s status/blocker changes on existing rows.</li>
+            <li>• <b className="text-ink">Auto-sync:</b> the Sheet is pulled automatically every few minutes — new rows appear, and Status / Actual date / Issue changes made in the Sheet flow into the app.</li>
+            <li>• <b className="text-ink">In-app updates are kept:</b> a BOA&apos;s status/blocker update in the app is only overwritten if the Sheet changes that same row afterwards.</li>
             <li>• In <b className="text-ink">UI mode</b>, the Sheet import is skipped entirely, so UI entries are never clobbered.</li>
           </ul>
         </div>
       </Reveal>
+    </div>
+  );
+}
+
+function ago(iso: string): string {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.round(h / 24)} d ago`;
+}
+
+function SyncStatus({ last }: { last: { at: string; ok: boolean; message: string; source: string } | null }) {
+  if (!last) {
+    return (
+      <p className="mt-4 rounded-xl border border-dashed border-line px-3 py-2 font-ui text-xs text-muted">
+        No sync recorded yet.
+      </p>
+    );
+  }
+  return (
+    <div
+      className={`mt-4 rounded-xl border px-3 py-2 font-ui text-xs ${
+        last.ok ? "border-line bg-canvas text-muted" : "border-danger/40 bg-red-50 text-danger"
+      }`}
+    >
+      <p>
+        <span className="font-semibold text-ink">Last sync:</span> {ago(last.at)} ·{" "}
+        {last.source === "auto" ? "automatic" : "manual"}
+      </p>
+      <p className="mt-0.5">{last.ok ? last.message : `Failed — ${last.message}`}</p>
     </div>
   );
 }
