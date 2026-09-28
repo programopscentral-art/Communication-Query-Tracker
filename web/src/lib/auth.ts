@@ -17,6 +17,13 @@ export function hasAdminAccess(u: AppUser): boolean {
   return u.role === "admin" || u.can_view_admin;
 }
 
+/** A full admin (role = admin). Only full admins may manage who is an admin —
+ *  console-access staff can view the console but not grant privileges (the DB
+ *  enforces the same rule on admin_emails via is_admin()). */
+export function isFullAdmin(u: AppUser): boolean {
+  return u.role === "admin";
+}
+
 /**
  * Require a signed-in, domain-valid user. Redirects to /login otherwise.
  * Wrapped in React cache() so the layout + page (which both call this during

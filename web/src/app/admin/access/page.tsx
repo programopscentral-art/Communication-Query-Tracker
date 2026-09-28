@@ -1,14 +1,16 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { grantAdmin, revokeAdmin } from "@/app/actions";
 import { Reveal } from "@/components/ui/Reveal";
 import { StaffTabs } from "@/components/StaffTabs";
+import { GrantAdminForm, RevokeAdminButton } from "./AccessForms";
 
 type AdminUser = { id: string; email: string | null; full_name: string | null; role: string };
 type StaffOpt = { email: string | null; name: string; employee_id: string };
 
 export default async function AdminAccess() {
   const me = await requireAdmin();
+  // Console-access staff can view this page; only full admins can change it.
+  const canManage = isFullAdmin(me);
   const supabase = await createClient();
 
   const [{ data: admins }, { data: allowlist }, { data: staff }] = await Promise.all([
@@ -42,32 +44,17 @@ export default async function AdminAccess() {
 
       {/* grant */}
       <Reveal delay={0.05}>
-        <form action={grantAdmin} className="card p-6">
-          <p className="mb-3 font-ui text-sm font-semibold text-ink">Grant admin access</p>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              name="email"
-              type="email"
-              required
-              list="staff-emails"
-              placeholder="name@nxtwave.co.in"
-              className="filter-input w-full sm:flex-1"
-            />
-            <datalist id="staff-emails">
-              {staffOpts.map((s) => (
-                <option key={s.employee_id} value={s.email ?? ""}>
-                  {s.name} · {s.employee_id}
-                </option>
-              ))}
-            </datalist>
-            <button className="rounded-full bg-accent px-5 py-2.5 font-ui text-sm font-semibold text-white shadow-[var(--shadow-glow)] transition-all hover:-translate-y-0.5">
-              Grant admin
-            </button>
+        {canManage ? (
+          <GrantAdminForm staff={staffOpts} />
+        ) : (
+          <div className="card border-dashed p-6">
+            <p className="font-ui text-sm font-semibold text-ink">View only</p>
+            <p className="mt-1 font-ui text-sm text-muted">
+              Your account has admin-console access, which lets you view this list. Only full admins can
+              grant or remove admin access — ask {adminUsers[0]?.full_name ?? "an admin"} if someone needs it.
+            </p>
           </div>
-          <p className="mt-2 font-ui text-xs text-muted">
-            Pick an existing staff email or type any @nxtwave.co.in address. Access applies on their next sign-in.
-          </p>
-        </form>
+        )}
       </Reveal>
 
       {/* current admins */}
@@ -92,14 +79,7 @@ export default async function AdminAccess() {
                       {det ? ` · ${det.employee_id}` : ""}
                     </p>
                   </div>
-                  {!isMe && (
-                    <form action={revokeAdmin}>
-                      <input type="hidden" name="email" value={a.email ?? ""} />
-                      <button className="rounded-full border border-line px-3 py-1.5 font-ui text-xs font-semibold text-danger transition-colors hover:border-danger">
-                        Revoke
-                      </button>
-                    </form>
-                  )}
+                  {canManage && !isMe && a.email && <RevokeAdminButton email={a.email} />}
                 </li>
               );
             })}
@@ -116,10 +96,7 @@ export default async function AdminAccess() {
               {pending.map((e) => (
                 <li key={e} className="flex items-center justify-between">
                   <span className="font-ui text-sm text-muted">{e}</span>
-                  <form action={revokeAdmin}>
-                    <input type="hidden" name="email" value={e} />
-                    <button className="font-ui text-xs font-semibold text-danger hover:underline">Remove</button>
-                  </form>
+                  {canManage && <RevokeAdminButton email={e} label="Remove" subtle />}
                 </li>
               ))}
             </ul>

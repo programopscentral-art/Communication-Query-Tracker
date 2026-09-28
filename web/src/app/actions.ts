@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireAppUser, requireAdmin } from "@/lib/auth";
+import { requireAppUser, requireAdmin, isFullAdmin } from "@/lib/auth";
+import { adminEmailProblem } from "@/lib/adminEmail";
 import { runSheetSync, describeSync, recordSyncStatus } from "@/lib/sheetSync";
 import { toE164 } from "@/lib/format";
 
@@ -417,31 +418,82 @@ export async function setAdminAccess(formData: FormData) {
 }
 
 // ── Admin Access: promote/demote a @nxtwave.co.in email to full admin ────────
-export async function grantAdmin(formData: FormData) {
-  await requireAdmin();
+// useActionState-compatible: returns a message (title + what to do) instead of
+// throwing, so a refusal shows inline rather than crashing to the error page.
+// `email` echoes what was typed so the field keeps it after an error; `at`
+// changes every submit so the form re-renders with it.
+export type AccessState = {
+  tone?: "error" | "success" | "info";
+  title?: string;
+  detail?: string;
+  email?: string;
+  at?: number;
+};
+
+const notFullAdmin = (): AccessState => ({
+  tone: "error",
+  title: "You can't change admin access",
+  detail: "Your account can view the admin console, but only full admins can grant or remove admin access. Ask a full admin to do this for you.",
+  at: Date.now(),
+});
+const tryAgain = (what: string, e: { message: string }): AccessState => ({
+  tone: "error",
+  title: `Couldn't ${what} right now`,
+  detail: `Please try again in a moment. If it keeps happening, send this to the tech team: ${e.message}`,
+  at: Date.now(),
+});
+
+export async function grantAdmin(_prev: AccessState, formData: FormData): Promise<AccessState> {
+  const me = await requireAdmin();
+  if (!isFullAdmin(me)) return notFullAdmin();
   const supabase = await createClient();
-  const email = s(formData, "email").toLowerCase();
-  if (!email.endsWith("@nxtwave.co.in")) throw new Error("Only @nxtwave.co.in emails can be admins.");
+  const typed = s(formData, "email");
+  const email = typed.toLowerCase();
+  const problem = adminEmailProblem(typed);
+  if (problem) return { tone: "error", ...problem, email: typed, at: Date.now() };
+
+  // Already an admin / already invited? Say so instead of silently re-saving.
+  const [{ data: account }, { data: invite }] = await Promise.all([
+    supabase.from("app_users").select("role").eq("email", email).maybeSingle(),
+    supabase.from("admin_emails").select("email").eq("email", email).maybeSingle(),
+  ]);
+  if (account?.role === "admin") {
+    return { tone: "info", title: "Already an admin", detail: `${email} already has full admin access — nothing to change.`, at: Date.now() };
+  }
+  if (invite && !account) {
+    return { tone: "info", title: "Already invited", detail: `${email} is already on the admin list. They'll become an admin the first time they sign in.`, at: Date.now() };
+  }
 
   // Persist in the allowlist (so it sticks even on re-provision)…
   const { error: e1 } = await supabase.from("admin_emails").upsert({ email }, { onConflict: "email" });
-  if (e1) throw new Error(e1.message);
+  if (e1) return { ...tryAgain("grant admin access", e1), email: typed };
   // …and promote them now if they've already signed in.
-  await supabase.from("app_users").update({ role: "admin" }).eq("email", email);
+  const { data: promoted, error: e2 } = await supabase
+    .from("app_users").update({ role: "admin" }).eq("email", email).select("id");
+  if (e2) return { ...tryAgain("finish granting admin access", e2), email: typed };
 
   revalidatePath("/admin/access");
+  return promoted?.length
+    ? { tone: "success", title: "Admin access granted", detail: `${email} is now a full admin. It takes effect the next time they open or refresh PingBoard.`, at: Date.now() }
+    : { tone: "success", title: "Invite saved", detail: `${email} hasn't signed in to PingBoard yet. They'll be a full admin as soon as they sign in with Google.`, at: Date.now() };
 }
 
-export async function revokeAdmin(formData: FormData) {
+export async function revokeAdmin(_prev: AccessState, formData: FormData): Promise<AccessState> {
   const me = await requireAdmin();
+  if (!isFullAdmin(me)) return notFullAdmin();
   const supabase = await createClient();
   const email = s(formData, "email").toLowerCase();
-  if (email === me.email.toLowerCase()) throw new Error("You can't revoke your own admin access.");
+  if (email === me.email.toLowerCase()) {
+    return { tone: "error", title: "You can't remove yourself", detail: "Ask another full admin if your own access should be removed.", at: Date.now() };
+  }
 
-  await supabase.from("admin_emails").delete().eq("email", email);
-  await supabase.from("app_users").update({ role: "boa" }).eq("email", email);
+  const { error: e1 } = await supabase.from("admin_emails").delete().eq("email", email);
+  if (e1) return tryAgain("remove admin access", e1);
+  const { error: e2 } = await supabase.from("app_users").update({ role: "boa" }).eq("email", email);
+  if (e2) return tryAgain("finish removing admin access", e2);
 
   revalidatePath("/admin/access");
+  return { tone: "success", title: "Admin access removed", detail: `${email} is no longer an admin.`, at: Date.now() };
 }
 
 // ── UI authoring: dynamic dropdowns + direct task creation ───────────────────
