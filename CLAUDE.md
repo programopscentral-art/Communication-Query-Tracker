@@ -97,8 +97,8 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 - FK delete rules on `boas`: `university_boas` CASCADE, `reminder_jobs` CASCADE, `app_users.boa_id` SET NULL.
 - Triggers on `tasks` UPDATE: `set_updated_at` (History "last activity" reads it), `audit_task_change_trg` (outcome + content fields only), `tasks_reminder_sync_trg` (only on publish_at/university/team/status/offsets).
 
-### Migrations (0001–0029; all applied to the live DB except the two schedules noted)
-0001 schema · 0002 auth(domain-lock trigger) · 0003 RLS · 0004 reminder engine · 0005 seed(18 unis + dropdowns) · 0006 views · 0007 reminder_prefs+precedence+manual-send · 0008 history(audit trigger+views) · 0009 tickets+announcements · 0010 admin_view_access(can_view_admin) · 0011 sheet_refs · 0012 staff_directory · 0013 ui_authoring(ref tables, priority→text, data_source_mode, origin) · 0014 ticket_meta · 0015 autolink_boa · 0016 reminder_view fire_at · 0017 regen_on_assignment · 0018 existing_keys_rpc · 0019 sync_state_rpc · 0020 task_edit_delete_audit · 0021 sheet_auto_sync (`task_sheet_state` + backfill, RPC allows service_role, `last_sheet_sync_*`) · 0022 schedule_sheet_sync (pg_cron job `pingboard-sheet-sync`, applied 2026-09-28) · 0023 read_only_admin (`has_admin_read()` + `*_viewer_read` SELECT policies on 13 tables, `admin_emails.level`, sign-up honours level) · 0024 events (table, guard trigger, RLS, events settings, campus aliases) · 0025 event_views · 0026 campus_name_fixes (Takshasila→"Takshashila"; all Chevella spellings → NIAT-Chevella; CIET → Chalapathy) · 0027 schedule_event_sync (`pingboard-event-sync`, :03/:18/:33/:48 — **apply after deploy**) · 0028 event_nudges (`event_last_day`, nudge settings + table, `v_event_overdue`) · 0029 schedule_event_nudges (`pingboard-event-nudges`, 04:30 UTC = 10:00 IST — **apply after deploy**).
+### Migrations (0001–0029, all applied to the live DB)
+0001 schema · 0002 auth(domain-lock trigger) · 0003 RLS · 0004 reminder engine · 0005 seed(18 unis + dropdowns) · 0006 views · 0007 reminder_prefs+precedence+manual-send · 0008 history(audit trigger+views) · 0009 tickets+announcements · 0010 admin_view_access(can_view_admin) · 0011 sheet_refs · 0012 staff_directory · 0013 ui_authoring(ref tables, priority→text, data_source_mode, origin) · 0014 ticket_meta · 0015 autolink_boa · 0016 reminder_view fire_at · 0017 regen_on_assignment · 0018 existing_keys_rpc · 0019 sync_state_rpc · 0020 task_edit_delete_audit · 0021 sheet_auto_sync (`task_sheet_state` + backfill, RPC allows service_role, `last_sheet_sync_*`) · 0022 schedule_sheet_sync (pg_cron job `pingboard-sheet-sync`, applied 2026-09-28) · 0023 read_only_admin (`has_admin_read()` + `*_viewer_read` SELECT policies on 13 tables, `admin_emails.level`, sign-up honours level) · 0024 events (table, guard trigger, RLS, events settings, campus aliases) · 0025 event_views · 0026 campus_name_fixes (Takshasila→"Takshashila"; all Chevella spellings → NIAT-Chevella; CIET → Chalapathy) · 0027 schedule_event_sync (`pingboard-event-sync`, applied 2026-09-30) · 0028 event_nudges (`event_last_day`, nudge settings + table, `v_event_overdue`) · 0029 schedule_event_nudges (`pingboard-event-nudges`, applied 2026-09-30).
 
 **Apply a migration:** a small node script using `connect()` from `scripts/db.mjs` + `readFileSync` of the `.sql` (or `npm run db:push` for all). Migrations were always applied directly to the live DB; the Supabase CLI was never linked. Before applying, check which triggers the change fires (see above) so a backfill doesn't flood History or regenerate reminders.
 
@@ -141,6 +141,18 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 - **View in Sheet** deep-links (`…/edit#gid=<source_gid>&range=A<source_row>`) — needs `NEXT_PUBLIC_SHEET_ID`.
 - CLI `node scripts/import-tracker.mjs [--commit]` does the same parsing (Communication-only + content detection) for bulk loads; it inserts + refreshes row refs but doesn't write `task_sheet_state` (the sync's no-memory fallback covers that).
 - **Staff are managed in-app** now — don't run `scripts/import-staff.mjs` (it would overwrite in-app staff edits from the old staff sheet).
+
+## Scheduled jobs (Supabase pg_cron → Vercel, all LIVE)
+
+| pg_cron job | Schedule (UTC) | Endpoint | Does |
+|---|---|---|---|
+| `pingboard-sheet-sync` | `*/10 * * * *` | `/api/cron/sync-sheet` | Communication sheet → tasks |
+| `pingboard-event-sync` | `3,18,33,48 * * * *` | `/api/cron/sync-events` | Event Reports sheet → events |
+| `pingboard-event-nudges` | `30 4 * * *` (10:00 IST) | `/api/cron/event-nudges` | queue reminders for overdue reports |
+
+- Each job calls `net.http_get` with `Authorization: Bearer <Vault pingboard_cron_secret>`; routes check it with `refuseCron()` (`lib/cronAuth.ts`), use the service-role client, and record `last_*_sync_*` / `last_event_nudge_*` in `app_settings` (shown on the Source / Events pages).
+- **Adding a job:** new route under `app/api/cron/` using `refuseCron` → a migration that `cron.schedule(...)`s the prod URL → push → **apply the migration only after the deploy is live** (otherwise it 404s every run) → fire it once from SQL and read `net._http_response` to confirm a 200.
+- Pause one: `select cron.unschedule('<jobname>');` · Inspect: `cron.job`, `cron.job_run_details`, `net._http_response`.
 
 ## Event Reports (`/admin/events`, `/u/[code]/events`)
 
@@ -191,11 +203,12 @@ Throwaway script (scratchpad, or `scripts/_*.mjs` deleted afterwards) run via Po
 
 ---
 
-## Current data facts (2026-09-28)
+## Current data facts (2026-09-30)
 
 - **22 universities** — 18 seeded + JOY (Chennai), Testing University (staff: Ravi), Central Testing, and **"Chalapathyl"** (a sheet typo auto-created 2026-09-07, 2 tasks; should be merged into Chalapathy or fixed in the sheet). "Takshasila" is displayed as **Takshashila** (code unchanged).
 - **806 events** (Oct 2025 – Aug 2026, 12 tabs); campus names: CIET → Chalapathy, Chevella / BITs Chevella → NIAT-Chevella, Takshashila → Takshashila. 311 overdue reports overall (mostly Oct–Dec 2025).
-- **10,181 tasks** = 10,156 from the sheet + 25 UI-authored. Every current Communication row (10,132 unique keys) is mapped. **24 sheet-origin rows are no longer in the sheet** (edited/deleted there) and still show in the app.
+- **~10.3k tasks** (the Communication sync scans ~10.2k sheet rows, all mapped) + 25 UI-authored. **24 sheet-origin rows are no longer in the sheet** (edited/deleted there) and still show in the app.
+- Last deploy: commit `9511286` (Event Reports, read-only admin, reminders, export, responsive UI) — Vercel success 2026-09-30.
 - Sheet data-entry typos (imported as-is): entry dates with year 6026, publish dates with year 206, ~224 blank/unparseable publish times.
 - ~76 staff across 21 universities (4 from the original import skipped for blank phones).
 
@@ -204,7 +217,7 @@ Throwaway script (scratchpad, or `scripts/_*.mjs` deleted afterwards) run via Po
 1. **WhatsApp go-live** — provider (Meta/BSP) + approved template + schedule the reminder-drain cron (`docs/REMINDER_ENGINE.md`). Currently mock. The sender must also drain `event_nudges` (queued, recent only).
 2. **Vercel Hobby → Pro** before real rollout (ToS + caps + cold starts); then change the sheet sync to `*/5`.
 3. **Rotate** the exposed service_role key + DB password (update root `.env`, `web/.env.local`, Vercel).
-4. **After each deploy of new cron routes:** apply `0027_schedule_event_sync.sql` and `0029_schedule_event_nudges.sql` (they call the prod URL).
-5. **Data clean-up (needs the user's call):** merge/fix "Chalapathyl"; review the 24 orphan sheet rows; ask comms to rename Communication column F back to "University"; events sheet — 6 duplicate Unique Keys, 3 unreadable dates ("20226").
-6. Add WhatsApp numbers for the 4 skipped staff (via the in-app Staff page).
+4. **Data clean-up (needs the user's call):** merge/fix "Chalapathyl"; review the 24 orphan sheet rows; ask comms to rename Communication column F back to "University"; events sheet — 6 duplicate Unique Keys, 3 unreadable dates ("20226").
+5. Add WhatsApp numbers for the 4 skipped staff (via the in-app Staff page).
+6. **Feature backlog suggested to the user (not started):** university scorecards (on-time publish %, overdue, report completion, trends) · daily admin digest (WhatsApp/email) · calendar view of schedule + events · event photo uploads (Supabase Storage) · data clean-up screen (orphans, removed rows, typo universities) · global search (Ctrl+K) · installable PWA.
 7. Nice-to-haves: optional **write-back** of BOA status to the sheet (needs a Google service account with edit access); Edit/Delete from Schedule rows; realtime board updates; two-way content sync; pagination for "All time".
