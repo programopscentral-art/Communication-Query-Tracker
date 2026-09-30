@@ -1,7 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runSheetSync, describeSync, recordSyncStatus } from "@/lib/sheetSync";
+import { refuseCron } from "@/lib/cronAuth";
 
 // Scheduled Sheet → app sync. Called every few minutes by Supabase pg_cron
 // (see supabase/migrations/0022_schedule_sheet_sync.sql) with
@@ -9,21 +9,9 @@ import { runSheetSync, describeSync, recordSyncStatus } from "@/lib/sheetSync";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false; // never run open
-  const got = Buffer.from(req.headers.get("authorization") ?? "");
-  const want = Buffer.from(`Bearer ${secret}`);
-  return got.length === want.length && timingSafeEqual(got, want);
-}
-
 async function handle(req: NextRequest) {
-  if (!process.env.CRON_SECRET) {
-    return NextResponse.json({ ok: false, error: "CRON_SECRET is not configured." }, { status: 500 });
-  }
-  if (!authorized(req)) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const refused = refuseCron(req);
+  if (refused) return refused;
 
   const supabase = createAdminClient();
   const { data: settings, error } = await supabase

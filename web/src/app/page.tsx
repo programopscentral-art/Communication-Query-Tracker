@@ -18,6 +18,8 @@ export default async function Home() {
 
   const code = (data?.[0]?.universities as { code?: string } | null)?.code;
   if (code) redirect(`/u/${code}`);
+  // Read-only admin who isn't university staff → the Admin console.
+  if (user.can_view_admin) redirect("/admin");
 
   // BOA with no assignment yet.
   return (

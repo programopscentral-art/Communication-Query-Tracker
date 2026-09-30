@@ -42,7 +42,7 @@ export default async function AdminSchedule({
       <Reveal>
         <p className="eyebrow mb-2">Schedule</p>
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">
+          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">
             Publish timeline
           </h1>
           <span className="font-ui text-sm text-muted">

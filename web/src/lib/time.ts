@@ -64,6 +64,11 @@ export function isViewKey(v: string | undefined): v is ViewKey {
   return !!v && ["yesterday", "today", "tomorrow", "upcoming", "week", "overdue", "all"].includes(v);
 }
 
+/** Today's IST calendar date as YYYY-MM-DD, shifted by `offsetDays` (e.g. -2). */
+export function istDateISO(offsetDays = 0, nowMs = Date.now()): string {
+  return new Date(nowMs + IST_OFFSET_MIN * 60000 + offsetDays * DAY).toISOString().slice(0, 10);
+}
+
 /** Window for a specific IST calendar day (YYYY-MM-DD) — for "search by date". */
 export function dateWindow(dateStr: string): { gte: string | null; lt: string | null } {
   const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);

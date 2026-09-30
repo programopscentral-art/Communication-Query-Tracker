@@ -1,4 +1,5 @@
 import { requireUniversityAccess } from "@/lib/auth";
+import { ReadOnlyNotice } from "@/components/ReadOnlyNotice";
 import { createClient } from "@/lib/supabase/server";
 import { createTicket } from "@/app/actions";
 import { fmtIST } from "@/lib/format";
@@ -35,14 +36,18 @@ export default async function Tickets({
 }) {
   const { code } = await params;
   const { view: rawView } = await searchParams;
-  await requireUniversityAccess(code);
+  const { canEdit } = await requireUniversityAccess(code);
   const view: ViewKey = isViewKey(rawView) ? rawView : "all";
   const supabase = await createClient();
+  const { data: uni } = await supabase.from("universities").select("id").eq("code", code).single();
 
   const { gte, lt } = istWindow(view);
+  // Only THIS university's tickets (admins/read-only admins can read all rows,
+  // so the filter must be explicit, not left to RLS).
   let q = supabase
     .from("tickets")
     .select("id, subject, description, status, priority, tags, link, created_at, raised_by_name, assigned_to_name")
+    .eq("university_id", uni?.id ?? "00000000-0000-0000-0000-000000000000")
     .order("created_at", { ascending: false })
     .limit(200);
   if (gte) q = q.gte("created_at", gte);
@@ -54,16 +59,17 @@ export default async function Tickets({
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Support</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Tickets</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Tickets</h1>
         <p className="mt-2 font-ui text-sm text-muted">Raise an issue or request — the admin team will pick it up.</p>
       </Reveal>
 
       <Reveal delay={0.06} className="mt-6">
+        {!canEdit ? <ReadOnlyNotice what="raise tickets for this university" /> : (
         <form action={createTicket} className="card space-y-3 p-6">
           <input type="hidden" name="code" value={code} />
           <input name="subject" required placeholder="Subject *" className="filter-input w-full" />
           <textarea name="description" rows={3} placeholder="Describe the issue…" className="filter-input w-full" />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <select name="priority" className="filter-input w-full" defaultValue="normal">
               <option value="normal">Normal</option>
               <option value="high">High</option>
@@ -76,6 +82,7 @@ export default async function Tickets({
             Raise ticket
           </button>
         </form>
+        )}
       </Reveal>
 
       <Reveal delay={0.1} className="mt-6">

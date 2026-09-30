@@ -39,7 +39,7 @@ export function ReminderPrefs({
       }}
       className="card p-5"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="eyebrow mb-1">Reminder timing</p>
           <p className="font-ui text-sm font-semibold text-ink">
@@ -79,7 +79,7 @@ export function ReminderPrefs({
         })}
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <button className="rounded-full bg-ink px-5 py-2 font-ui text-sm font-semibold text-white transition-colors hover:bg-accent">
           Save timing
         </button>

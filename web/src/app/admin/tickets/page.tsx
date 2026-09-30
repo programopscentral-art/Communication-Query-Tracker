@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { updateTicketStatus, assignTicket } from "@/app/actions";
 import { fmtIST } from "@/lib/format";
@@ -32,7 +32,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default async function AdminTickets({ searchParams }: { searchParams: Promise<{ view?: string; date?: string }> }) {
-  await requireAdmin();
+  const canEdit = isFullAdmin(await requireAdmin());
   const sp = await searchParams;
   const view: ViewKey = isViewKey(sp.view) ? sp.view : "all";
   // A specific date (?date=YYYY-MM-DD) filters by when the ticket was raised.
@@ -61,7 +61,7 @@ export default async function AdminTickets({ searchParams }: { searchParams: Pro
       <Reveal>
         <p className="eyebrow mb-2">Support</p>
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Tickets</h1>
+          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Tickets</h1>
           <span className="font-ui text-sm text-muted">{openCount} open</span>
         </div>
       </Reveal>
@@ -74,7 +74,7 @@ export default async function AdminTickets({ searchParams }: { searchParams: Pro
       <div className="mt-4 space-y-3">
         {tickets.map((t) => (
           <div key={t.id} className="card p-5">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TONE[t.status] ?? ""}`}>{t.status}</span>
@@ -99,7 +99,8 @@ export default async function AdminTickets({ searchParams }: { searchParams: Pro
                 </p>
               </div>
 
-              <div className="flex shrink-0 flex-col gap-2">
+              {canEdit && (
+              <div className="grid shrink-0 gap-2 sm:flex sm:w-48 sm:flex-col">
                 <form action={updateTicketStatus}>
                   <input type="hidden" name="ticket_id" value={t.id} />
                   <select name="status" defaultValue={t.status} className="filter-input w-full">
@@ -122,6 +123,7 @@ export default async function AdminTickets({ searchParams }: { searchParams: Pro
                   </button>
                 </form>
               </div>
+              )}
             </div>
           </div>
         ))}

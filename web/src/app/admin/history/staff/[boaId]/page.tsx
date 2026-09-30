@@ -41,7 +41,7 @@ export default async function StaffHistory({ params }: { params: Promise<{ boaId
           ← History
         </Link>
         <p className="eyebrow mb-2 mt-3">Staff history</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">{boa.name}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">{boa.name}</h1>
         <p className="mt-2 font-ui text-sm text-muted">
           {boa.employee_id}
           {boa.designation ? ` · ${boa.designation}` : ""} · {boa.whatsapp_e164}

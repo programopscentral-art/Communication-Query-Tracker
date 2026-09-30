@@ -9,6 +9,7 @@ import { Reveal } from "@/components/ui/Reveal";
 import { ViewTabs } from "@/components/ViewTabs";
 import { ReminderPrefs } from "@/components/ReminderPrefs";
 import { ViewInSheet } from "@/components/ViewInSheet";
+import { loadOverdue } from "@/lib/eventQueries";
 
 type Task = {
   id: string;
@@ -33,7 +34,7 @@ export default async function UniversityBoard({
 }) {
   const { code } = await params;
   const { view: rawView } = await searchParams;
-  await requireUniversityAccess(code);
+  const { canEdit } = await requireUniversityAccess(code);
   const view: ViewKey = isViewKey(rawView) ? rawView : "today";
   const supabase = await createClient();
 
@@ -55,26 +56,52 @@ export default async function UniversityBoard({
   if (view === "overdue") q = q.in("execution_status", ["pending", "in_progress"]);
 
   // prefs + tasks in parallel (both only need uni.id) — one round-trip, not two
-  const [{ data: prefs }, { data }] = await Promise.all([
+  const [{ data: prefs }, { data }, overdueRows] = await Promise.all([
     supabase.from("reminder_prefs").select("offsets_min, auto_enabled").eq("university_id", uni.id).maybeSingle(),
     q.limit(500),
+    loadOverdue(supabase, uni.id),
   ]);
   const tasks = (data ?? []) as Task[];
+  const overdueReports = overdueRows.reduce((n, r) => n + r.overdue, 0);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Your board</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">{uni.name}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">{uni.name}</h1>
       </Reveal>
 
+      {overdueReports > 0 && (
+        <Reveal delay={0.03} className="mt-6">
+          <Link
+            href={`/u/${code}/events?month=all&status=overdue`}
+            className="card flex flex-wrap items-center justify-between gap-3 border-red-200 bg-red-50 px-5 py-4 transition-all hover:-translate-y-0.5"
+          >
+            <span className="font-ui text-sm text-red-900">
+              📋 <b>{overdueReports} event report{overdueReports === 1 ? " is" : "s are"} overdue</b>
+              {canEdit ? " — please fill them." : "."}
+            </span>
+            <span className="font-ui text-sm font-semibold text-red-900">Open event reports →</span>
+          </Link>
+        </Reveal>
+      )}
+
       <Reveal delay={0.05} className="mt-6">
-        <ReminderPrefs
-          universityId={uni.id}
-          code={code}
-          offsets={prefs?.offsets_min ?? [15, 10]}
-          auto={prefs?.auto_enabled ?? true}
-        />
+        {canEdit ? (
+          <ReminderPrefs
+            universityId={uni.id}
+            code={code}
+            offsets={prefs?.offsets_min ?? [15, 10]}
+            auto={prefs?.auto_enabled ?? true}
+          />
+        ) : (
+          <div className="card px-5 py-4 font-ui text-sm text-muted">
+            <span className="font-semibold text-ink">Reminder timing:</span>{" "}
+            {(prefs?.offsets_min ?? [15, 10]).join(" & ")} min before publish ·{" "}
+            {(prefs?.auto_enabled ?? true) ? "automatic" : "manual only"}
+            <span className="ml-2 rounded-full bg-line-soft px-2 py-0.5 text-xs">view only</span>
+          </div>
+        )}
       </Reveal>
 
       <Reveal delay={0.1} className="mt-8">

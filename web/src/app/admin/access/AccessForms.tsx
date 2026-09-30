@@ -33,6 +33,17 @@ export function GrantAdminForm({ staff }: { staff: { email: string | null; name:
   return (
     <form action={action} className="card p-6">
       <p className="mb-3 font-ui text-sm font-semibold text-ink">Grant admin access</p>
+      {/* re-mount after each result so the chosen level survives an error */}
+      <div key={state.at ?? 0} className="mb-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Access level">
+        <label className="flex cursor-pointer items-center gap-2 rounded-full border border-line px-3 py-1.5 font-ui text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:checked]:text-accent">
+          <input type="radio" name="level" value="admin" defaultChecked={(state.level ?? "admin") === "admin"} className="accent-[var(--color-accent)]" />
+          Full admin
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 rounded-full border border-line px-3 py-1.5 font-ui text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:checked]:text-accent">
+          <input type="radio" name="level" value="viewer" defaultChecked={state.level === "viewer"} className="accent-[var(--color-accent)]" />
+          Read-only admin
+        </label>
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
           // re-mount after each result so the field shows what was typed (kept on error, cleared on success)
@@ -57,11 +68,12 @@ export function GrantAdminForm({ staff }: { staff: { email: string | null; name:
           disabled={pending}
           className="rounded-full bg-accent px-5 py-2.5 font-ui text-sm font-semibold text-white shadow-[var(--shadow-glow)] transition-all hover:-translate-y-0.5 disabled:opacity-60"
         >
-          {pending ? "Granting…" : "Grant admin"}
+          {pending ? "Granting…" : "Grant access"}
         </button>
       </div>
       <p className="mt-2 font-ui text-xs text-muted">
-        Pick an existing staff email or type any @nxtwave.co.in address. Access applies on their next sign-in.
+        Pick an existing staff email or type any @nxtwave.co.in address. If they&apos;ve never signed in, access
+        switches on at their first sign-in. Granting a different level changes their access.
       </p>
       <Notice state={state} />
     </form>

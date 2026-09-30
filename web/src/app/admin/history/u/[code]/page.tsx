@@ -46,7 +46,7 @@ export default async function UniversityHistory({ params }: { params: Promise<{ 
           ← History
         </Link>
         <p className="eyebrow mb-2 mt-3">University history</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">{uni.university}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">{uni.university}</h1>
       </Reveal>
 
       <RevealGroup className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -66,7 +66,7 @@ export default async function UniversityHistory({ params }: { params: Promise<{ 
               <h2 className="font-ui text-sm font-semibold text-ink">Staff ({(assigns ?? []).length})</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead className="bg-canvas text-left font-ui text-xs uppercase tracking-wider text-muted">
                   <tr>
                     <th className="px-6 py-3">Name</th>

@@ -1,4 +1,5 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
+import { ReadOnlyNotice } from "@/components/ReadOnlyNotice";
 import { createClient } from "@/lib/supabase/server";
 import { createTaskEntry } from "@/app/actions";
 import { Reveal } from "@/components/ui/Reveal";
@@ -12,7 +13,16 @@ async function refOpts(supabase: Awaited<ReturnType<typeof createClient>>, table
 }
 
 export default async function Compose() {
-  await requireAdmin();
+  const me = await requireAdmin();
+  if (!isFullAdmin(me)) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <p className="eyebrow mb-2">Authoring</p>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">New communication</h1>
+        <ReadOnlyNotice what="create communications" className="mt-6" />
+      </div>
+    );
+  }
   const supabase = await createClient();
 
   const [team, updateType, category, priority, channel, contentType, audience, unis] = await Promise.all([
@@ -31,7 +41,7 @@ export default async function Compose() {
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Authoring · UI → Database</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">New communication</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">New communication</h1>
         <p className="mt-2 font-ui text-sm text-muted">
           Create an entry directly in the app — no Google Sheet needed. Every dropdown supports
           <span className="font-semibold text-ink"> ＋ Add new</span> to extend it on the fly.

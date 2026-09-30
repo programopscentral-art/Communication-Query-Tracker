@@ -64,7 +64,7 @@ export default async function HistoryHome({
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Admin only · Audit</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">
           University & staff history
         </h1>
         <p className="mt-2 font-ui text-sm text-muted">
@@ -85,7 +85,7 @@ export default async function HistoryHome({
               <h2 className="font-ui text-sm font-semibold text-ink">University-wise history</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead className="bg-canvas text-left font-ui text-xs uppercase tracking-wider text-muted">
                   <tr>
                     <th className="px-6 py-3">University</th>

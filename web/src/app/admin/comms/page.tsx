@@ -1,5 +1,6 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { ReadOnlyNotice } from "@/components/ReadOnlyNotice";
 import { postInternalMessage } from "@/app/actions";
 import { fmtIST } from "@/lib/format";
 import { Reveal } from "@/components/ui/Reveal";
@@ -12,7 +13,7 @@ type Msg = {
 };
 
 export default async function InternalComms() {
-  await requireAdmin();
+  const canPost = isFullAdmin(await requireAdmin());
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -27,7 +28,7 @@ export default async function InternalComms() {
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Admin only</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">
           Internal communication
         </h1>
         <p className="mt-2 font-ui text-sm text-muted">
@@ -36,6 +37,7 @@ export default async function InternalComms() {
       </Reveal>
 
       <Reveal delay={0.06} className="mt-6">
+        {!canPost ? <ReadOnlyNotice what="post messages" /> : (
         <form action={postInternalMessage} className="card p-5">
           <textarea
             name="body"
@@ -48,6 +50,7 @@ export default async function InternalComms() {
             Post
           </button>
         </form>
+        )}
       </Reveal>
 
       <Reveal delay={0.1} className="mt-6">

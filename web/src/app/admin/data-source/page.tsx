@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { setDataSourceMode } from "@/app/actions";
 import { Reveal } from "@/components/ui/Reveal";
@@ -8,7 +8,7 @@ import { SyncNowButton } from "./SyncNowButton";
 export const maxDuration = 60;
 
 export default async function DataSource() {
-  await requireAdmin();
+  const canEdit = isFullAdmin(await requireAdmin());
   const supabase = await createClient();
   const { data } = await supabase
     .from("app_settings")
@@ -34,7 +34,7 @@ export default async function DataSource() {
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Control</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Data source</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Data source</h1>
         <p className="mt-2 font-ui text-sm text-muted">
           Choose what drives the app. Switching never deletes data — it only decides who is the
           source of truth going forward.
@@ -51,14 +51,16 @@ export default async function DataSource() {
             desc="The tracker sheet is the source of truth. Imports sync Sheet → app. On a duplicate, the Sheet version wins."
             count={sheetCount ?? 0}
             countLabel="sheet-sourced entries"
+            canEdit={canEdit}
             footer={mode === "sheet" ? (
               <>
                 <SyncStatus last={last} />
-                <SyncNowButton />
+                {canEdit && <SyncNowButton />}
               </>
             ) : null}
           />
           <ModeCard
+            canEdit={canEdit}
             active={mode === "ui"}
             mode="ui"
             title="This app (UI)"
@@ -120,6 +122,7 @@ function SyncStatus({ last }: { last: { at: string; ok: boolean; message: string
 }
 
 function ModeCard({
+  canEdit,
   active,
   mode,
   title,
@@ -129,6 +132,7 @@ function ModeCard({
   countLabel,
   footer,
 }: {
+  canEdit: boolean;
   active: boolean;
   mode: "sheet" | "ui";
   title: string;
@@ -149,7 +153,7 @@ function ModeCard({
       <p className="mt-3 font-ui text-xs text-muted">
         <span className="text-lg font-bold text-ink">{count.toLocaleString("en-IN")}</span> {countLabel}
       </p>
-      {!active && (
+      {!active && canEdit && (
         <form action={setDataSourceMode} className="mt-4">
           <input type="hidden" name="mode" value={mode} />
           <button className="w-full rounded-full bg-ink px-5 py-2.5 font-ui text-sm font-semibold text-white transition-colors hover:bg-accent">

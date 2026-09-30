@@ -39,7 +39,7 @@ export default async function Team({ params }: { params: Promise<{ code: string 
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Your university</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">{uni.name} — Team</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">{uni.name} — Team</h1>
         <p className="mt-2 font-ui text-sm text-muted">
           {members.length} staff. You only ever see your own university&apos;s people.
         </p>

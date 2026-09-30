@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireAppUser, requireAdmin, isFullAdmin } from "@/lib/auth";
+import { requireAppUser, requireAdmin, requireWriteAdmin, isFullAdmin, READ_ONLY_MESSAGE } from "@/lib/auth";
 import { adminEmailProblem } from "@/lib/adminEmail";
 import { runSheetSync, describeSync, recordSyncStatus } from "@/lib/sheetSync";
 import { toE164 } from "@/lib/format";
@@ -15,7 +15,7 @@ const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 export type SyncState = { error?: string; message?: string };
 
 export async function syncSheetNow(_prev: SyncState, _fd: FormData): Promise<SyncState> {
-  await requireAdmin();
+  if (!isFullAdmin(await requireAdmin())) return { error: READ_ONLY_MESSAGE };
   const supabase = await createClient();
 
   const { data: settings } = await supabase.from("app_settings").select("data_source_mode").eq("id", 1).single();
@@ -109,7 +109,7 @@ export async function sendReminderNow(taskId: string, code: string): Promise<num
 /** Admin-only full content edit of a task. Keeps source_key stable so a later
  *  sheet sync won't re-insert the row as a duplicate. */
 export async function updateTaskFull(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const id = s(formData, "task_id");
   const code = s(formData, "code");
@@ -138,7 +138,7 @@ export async function updateTaskFull(formData: FormData) {
 
 /** Admin-only delete of a task (cascades its reminders; audited). */
 export async function deleteTask(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const id = s(formData, "task_id");
   const code = s(formData, "code");
@@ -153,7 +153,7 @@ export async function deleteTask(formData: FormData) {
 
 /** Admin posts an internal (admin-only) message. */
 export async function postInternalMessage(formData: FormData) {
-  const user = await requireAdmin();
+  const user = await requireWriteAdmin();
   const supabase = await createClient();
 
   const body = String(formData.get("body")).trim();
@@ -190,7 +190,7 @@ export async function createStaff(
   _prev: StaffFormState,
   formData: FormData,
 ): Promise<StaffFormState> {
-  await requireAdmin();
+  if (!isFullAdmin(await requireAdmin())) return { error: READ_ONLY_MESSAGE };
   const supabase = await createClient();
 
   const universityId = s(formData, "university_id");
@@ -230,7 +230,7 @@ export async function createStaff(
 }
 
 export async function updateStaff(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const id = s(formData, "boa_id");
   const phone = toE164(s(formData, "whatsapp_e164"));
@@ -256,7 +256,7 @@ export async function updateStaff(formData: FormData) {
  *  Deactivating stops future reminders (eligibility checks `active`) and the
  *  0017 trigger regenerates jobs; it preserves all history. */
 export async function setStaffActive(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const id = s(formData, "boa_id");
   const active = s(formData, "active") === "true";
@@ -270,7 +270,7 @@ export async function setStaffActive(formData: FormData) {
  *  reminder_jobs; any linked login (app_users.boa_id) is set null (that person
  *  keeps their account but loses the staff link until re-added by email). */
 export async function deleteStaff(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const id = s(formData, "boa_id");
   const { error } = await supabase.from("boas").delete().eq("id", id);
@@ -279,7 +279,7 @@ export async function deleteStaff(formData: FormData) {
 }
 
 export async function upsertAssignment(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const boaId = s(formData, "boa_id");
   const { error } = await supabase.from("university_boas").upsert(
@@ -297,7 +297,7 @@ export async function upsertAssignment(formData: FormData) {
 }
 
 export async function removeAssignment(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const boaId = s(formData, "boa_id");
   const { error } = await supabase
@@ -338,7 +338,7 @@ export async function createTicket(formData: FormData) {
 }
 
 export async function updateTicketStatus(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const id = s(formData, "ticket_id");
   const { error } = await supabase
@@ -351,7 +351,7 @@ export async function updateTicketStatus(formData: FormData) {
 
 /** Optionally tag a ticket to a person (an app user). Empty clears it. Admin only. */
 export async function assignTicket(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const id = s(formData, "ticket_id");
   const assignee = s(formData, "assigned_to");
@@ -382,7 +382,7 @@ export async function assignTicket(formData: FormData) {
 
 // ── Announcement bar management — admin only ─────────────────────────────────
 export async function createAnnouncement(formData: FormData) {
-  const user = await requireAdmin();
+  const user = await requireWriteAdmin();
   const supabase = await createClient();
   const uni = s(formData, "university_id");
   const { error } = await supabase.from("announcements").insert({
@@ -396,7 +396,7 @@ export async function createAnnouncement(formData: FormData) {
 }
 
 export async function setAnnouncementActive(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const { error } = await supabase
     .from("announcements")
@@ -408,7 +408,7 @@ export async function setAnnouncementActive(formData: FormData) {
 
 // Grant / revoke Admin-console access for a staff member (admin only).
 export async function setAdminAccess(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const boaId = s(formData, "boa_id");
   const on = formData.get("can_view_admin") === "true";
@@ -427,13 +427,14 @@ export type AccessState = {
   title?: string;
   detail?: string;
   email?: string;
+  level?: "admin" | "viewer";
   at?: number;
 };
 
 const notFullAdmin = (): AccessState => ({
   tone: "error",
   title: "You can't change admin access",
-  detail: "Your account can view the admin console, but only full admins can grant or remove admin access. Ask a full admin to do this for you.",
+  detail: "You have read-only admin access. Only full admins can grant or remove admin access — ask a full admin to do this for you.",
   at: Date.now(),
 });
 const tryAgain = (what: string, e: { message: string }): AccessState => ({
@@ -449,33 +450,44 @@ export async function grantAdmin(_prev: AccessState, formData: FormData): Promis
   const supabase = await createClient();
   const typed = s(formData, "email");
   const email = typed.toLowerCase();
+  const level: "admin" | "viewer" = s(formData, "level") === "viewer" ? "viewer" : "admin";
+  const levelName = level === "admin" ? "full admin" : "read-only admin";
   const problem = adminEmailProblem(typed);
-  if (problem) return { tone: "error", ...problem, email: typed, at: Date.now() };
-
-  // Already an admin / already invited? Say so instead of silently re-saving.
-  const [{ data: account }, { data: invite }] = await Promise.all([
-    supabase.from("app_users").select("role").eq("email", email).maybeSingle(),
-    supabase.from("admin_emails").select("email").eq("email", email).maybeSingle(),
-  ]);
-  if (account?.role === "admin") {
-    return { tone: "info", title: "Already an admin", detail: `${email} already has full admin access — nothing to change.`, at: Date.now() };
+  if (problem) return { tone: "error", ...problem, email: typed, level, at: Date.now() };
+  if (email === me.email.toLowerCase()) {
+    return { tone: "error", title: "You can't change your own access", detail: "Ask another full admin if your access should change.", email: typed, level, at: Date.now() };
   }
-  if (invite && !account) {
-    return { tone: "info", title: "Already invited", detail: `${email} is already on the admin list. They'll become an admin the first time they sign in.`, at: Date.now() };
+
+  // Already at this level / already invited? Say so instead of silently re-saving.
+  const [{ data: account }, { data: invite }] = await Promise.all([
+    supabase.from("app_users").select("role, can_view_admin").eq("email", email).maybeSingle(),
+    supabase.from("admin_emails").select("email, level").eq("email", email).maybeSingle(),
+  ]);
+  const current = account ? (account.role === "admin" ? "admin" : account.can_view_admin ? "viewer" : null) : null;
+  if (account && current === level) {
+    return { tone: "info", title: `Already a ${levelName}`, detail: `${email} already has ${levelName} access — nothing to change.`, at: Date.now() };
+  }
+  if (!account && invite?.level === level) {
+    return { tone: "info", title: "Already invited", detail: `${email} is already invited as a ${levelName}. Access switches on the first time they sign in.`, at: Date.now() };
   }
 
   // Persist in the allowlist (so it sticks even on re-provision)…
-  const { error: e1 } = await supabase.from("admin_emails").upsert({ email }, { onConflict: "email" });
-  if (e1) return { ...tryAgain("grant admin access", e1), email: typed };
-  // …and promote them now if they've already signed in.
-  const { data: promoted, error: e2 } = await supabase
-    .from("app_users").update({ role: "admin" }).eq("email", email).select("id");
-  if (e2) return { ...tryAgain("finish granting admin access", e2), email: typed };
+  const { error: e1 } = await supabase.from("admin_emails").upsert({ email, level }, { onConflict: "email" });
+  if (e1) return { ...tryAgain("grant access", e1), email: typed, level };
+  // …and apply it now if they've already signed in.
+  const { data: changed, error: e2 } = await supabase
+    .from("app_users")
+    .update(level === "admin" ? { role: "admin", can_view_admin: false } : { role: "boa", can_view_admin: true })
+    .eq("email", email)
+    .select("id");
+  if (e2) return { ...tryAgain("finish granting access", e2), email: typed, level };
 
   revalidatePath("/admin/access");
-  return promoted?.length
-    ? { tone: "success", title: "Admin access granted", detail: `${email} is now a full admin. It takes effect the next time they open or refresh PingBoard.`, at: Date.now() }
-    : { tone: "success", title: "Invite saved", detail: `${email} hasn't signed in to PingBoard yet. They'll be a full admin as soon as they sign in with Google.`, at: Date.now() };
+  if (!changed?.length) {
+    return { tone: "success", title: "Invite saved", detail: `${email} hasn't signed in to PingBoard yet. They'll be a ${levelName} as soon as they sign in with Google.`, at: Date.now() };
+  }
+  const what = current === "admin" && level === "viewer" ? "changed to read-only admin" : `now a ${levelName}`;
+  return { tone: "success", title: "Access updated", detail: `${email} is ${what}. It takes effect the next time they open or refresh PingBoard.`, at: Date.now() };
 }
 
 export async function revokeAdmin(_prev: AccessState, formData: FormData): Promise<AccessState> {
@@ -489,11 +501,11 @@ export async function revokeAdmin(_prev: AccessState, formData: FormData): Promi
 
   const { error: e1 } = await supabase.from("admin_emails").delete().eq("email", email);
   if (e1) return tryAgain("remove admin access", e1);
-  const { error: e2 } = await supabase.from("app_users").update({ role: "boa" }).eq("email", email);
+  const { error: e2 } = await supabase.from("app_users").update({ role: "boa", can_view_admin: false }).eq("email", email);
   if (e2) return tryAgain("finish removing admin access", e2);
 
   revalidatePath("/admin/access");
-  return { tone: "success", title: "Admin access removed", detail: `${email} is no longer an admin.`, at: Date.now() };
+  return { tone: "success", title: "Admin access removed", detail: `${email} no longer has admin access (full or read-only).`, at: Date.now() };
 }
 
 // ── UI authoring: dynamic dropdowns + direct task creation ───────────────────
@@ -522,7 +534,7 @@ function sourceKey(parts: (string | null)[]): string {
 
 /** Add a new dropdown value (or a new university) — admin only. Returns it. */
 export async function addOption(kind: string, value: string): Promise<{ value: string; label: string }> {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const v = value.trim();
   if (!v) throw new Error("Empty value");
@@ -550,7 +562,7 @@ export async function addOption(kind: string, value: string): Promise<{ value: s
 /** Create one task directly from the UI. Sheet-identical rows dedupe via
  *  source_key (Sheet wins on later import). Admin / granted only. */
 export async function createTaskEntry(formData: FormData) {
-  const user = await requireAdmin();
+  const user = await requireWriteAdmin();
   const supabase = await createClient();
 
   // One or many universities ("All" checks them all client-side).
@@ -614,7 +626,7 @@ export async function createTaskEntry(formData: FormData) {
 
 /** Flip the source of truth: 'sheet' (import shows) or 'ui' (authoring on). */
 export async function setDataSourceMode(formData: FormData) {
-  await requireAdmin();
+  await requireWriteAdmin();
   const supabase = await createClient();
   const mode = s(formData, "mode") === "ui" ? "ui" : "sheet";
   const { error } = await supabase.from("app_settings").update({ data_source_mode: mode }).eq("id", 1);

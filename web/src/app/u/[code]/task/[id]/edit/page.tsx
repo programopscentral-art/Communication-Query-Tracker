@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { notFound, redirect } from "next/navigation";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { updateTaskFull } from "@/app/actions";
 import { utcToIstLocalInput } from "@/lib/format";
@@ -15,7 +15,8 @@ async function refOpts(supabase: Awaited<ReturnType<typeof createClient>>, table
 
 export default async function EditTask({ params }: { params: Promise<{ code: string; id: string }> }) {
   const { code, id } = await params;
-  await requireAdmin(); // admin-only — BOAs are redirected
+  // full admins only — BOAs are redirected; read-only admins go back to the task
+  if (!isFullAdmin(await requireAdmin())) redirect(`/u/${code}/task/${id}`);
   const supabase = await createClient();
 
   const [{ data: task }, team, updateType, category, priority, channel, contentType, audience, { data: unis }] =
@@ -38,7 +39,7 @@ export default async function EditTask({ params }: { params: Promise<{ code: str
       <Reveal>
         <Link href={`/u/${code}/task/${id}`} className="font-ui text-sm text-accent hover:underline">← Back to task</Link>
         <p className="eyebrow mb-2 mt-3">Admin · Edit</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Edit communication</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Edit communication</h1>
       </Reveal>
 
       <Reveal delay={0.06} className="mt-6">

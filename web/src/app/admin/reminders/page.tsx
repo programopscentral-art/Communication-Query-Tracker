@@ -73,7 +73,7 @@ export default async function ReminderLog({
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
       <Reveal>
         <p className="eyebrow mb-2">Delivery</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Reminder log</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Reminder log</h1>
         <p className="mt-2 font-ui text-sm text-muted">Every WhatsApp reminder across universities, by fire time.</p>
       </Reveal>
 
@@ -86,7 +86,7 @@ export default async function ReminderLog({
       <Reveal delay={0.1} className="mt-6">
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-canvas text-left font-ui text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th className="px-6 py-3">University</th>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/ui/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
@@ -30,7 +30,7 @@ export default async function StaffDirectory({
 }: {
   searchParams: Promise<{ uni?: string }>;
 }) {
-  await requireAdmin();
+  const canEdit = isFullAdmin(await requireAdmin());
   const sp = await searchParams;
   const supabase = await createClient();
 
@@ -57,8 +57,8 @@ export default async function StaffDirectory({
       <Reveal>
         <p className="eyebrow mb-2">People</p>
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Staff directory</h1>
-          <ButtonLink href="/admin/staff/new" size="sm">+ Add staff</ButtonLink>
+          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Staff directory</h1>
+          {canEdit && <ButtonLink href="/admin/staff/new" size="sm">+ Add staff</ButtonLink>}
         </div>
         <p className="mt-2 font-ui text-sm text-muted">{totalStaff} staff across {(counts ?? []).length} universities</p>
       </Reveal>
@@ -90,7 +90,7 @@ export default async function StaffDirectory({
       <Reveal delay={0.12} className="mt-4">
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-canvas text-left font-ui text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th className="px-6 py-3">Name</th>
@@ -137,9 +137,11 @@ export default async function StaffDirectory({
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <Link href={`/admin/staff/${st.id}`} className="rounded-full border border-line px-3 py-1.5 font-ui text-xs font-semibold text-muted transition-colors hover:border-accent hover:text-accent">
-                          Edit
+                          {canEdit ? "Edit" : "View"}
                         </Link>
-                        <StaffRowActions boaId={st.id} name={st.name} active={st.active} hasAccount={linked.has(st.id)} />
+                        {canEdit && (
+                          <StaffRowActions boaId={st.id} name={st.name} active={st.active} hasAccount={linked.has(st.id)} />
+                        )}
                       </div>
                     </td>
                   </tr>

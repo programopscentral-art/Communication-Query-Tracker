@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
+import { ReadOnlyNotice } from "@/components/ReadOnlyNotice";
 import { createClient } from "@/lib/supabase/server";
 import { updateStaff, upsertAssignment, removeAssignment, setAdminAccess } from "@/app/actions";
 import { Reveal } from "@/components/ui/Reveal";
@@ -13,7 +14,7 @@ const TEAM_SCOPES = [
 ];
 
 export default async function EditStaff({ params }: { params: Promise<{ boaId: string }> }) {
-  await requireAdmin();
+  const canEdit = isFullAdmin(await requireAdmin());
   const { boaId } = await params;
   const supabase = await createClient();
 
@@ -35,18 +36,21 @@ export default async function EditStaff({ params }: { params: Promise<{ boaId: s
       <Reveal>
         <Link href="/admin/staff" className="font-ui text-sm text-accent hover:underline">← Staff directory</Link>
         <div className="mt-3 flex items-center gap-3">
-          <p className="eyebrow">Edit staff</p>
+          <p className="eyebrow">{canEdit ? "Edit staff" : "Staff profile"}</p>
           <a href={waLink(boa.whatsapp_e164)} target="_blank" rel="noopener noreferrer" className="rounded-full border border-line px-2.5 py-1 font-ui text-xs font-semibold text-success hover:border-success">WhatsApp ↗</a>
         </div>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">{boa.name}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">{boa.name}</h1>
       </Reveal>
 
-      {/* details */}
+      {!canEdit && <ReadOnlyNotice what="edit staff" className="mt-6" />}
+
+      {/* details — a disabled fieldset makes the whole form read-only */}
       <Reveal delay={0.05} className="mt-6">
-        <form action={updateStaff} className="card space-y-4 p-6">
+        <form action={updateStaff} className="card p-6">
+          <fieldset disabled={!canEdit} className="space-y-4">
           <input type="hidden" name="boa_id" value={boa.id} />
           <p className="font-ui text-sm font-semibold text-ink">Details <span className="text-muted">· {boa.employee_id}</span></p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <L label="Full name"><input name="name" defaultValue={boa.name} className="filter-input w-full" /></L>
             <L label="Designation"><input name="designation" defaultValue={boa.designation ?? ""} className="filter-input w-full" /></L>
             <L label="WhatsApp"><input name="whatsapp_e164" defaultValue={boa.whatsapp_e164} className="filter-input w-full" /></L>
@@ -56,7 +60,8 @@ export default async function EditStaff({ params }: { params: Promise<{ boaId: s
             <input type="checkbox" name="active" defaultChecked={boa.active} className="h-4 w-4 accent-[var(--color-accent)]" />
             <span className="font-ui text-sm text-ink">Active (receives reminders)</span>
           </label>
-          <button className="rounded-full bg-ink px-5 py-2 font-ui text-sm font-semibold text-white transition-colors hover:bg-accent">Save details</button>
+          {canEdit && <button className="rounded-full bg-ink px-5 py-2 font-ui text-sm font-semibold text-white transition-colors hover:bg-accent">Save details</button>}
+          </fieldset>
         </form>
       </Reveal>
 
@@ -76,7 +81,7 @@ export default async function EditStaff({ params }: { params: Promise<{ boaId: s
                   <input type="hidden" name="boa_id" value={boa.id} />
                   <input type="hidden" name="university_id" value={u?.id ?? ""} />
                   <input type="hidden" name="team_scope" value={a.team_scope} />
-                  <button className="font-ui text-xs font-semibold text-danger hover:underline">Remove</button>
+                  {canEdit && <button className="font-ui text-xs font-semibold text-danger hover:underline">Remove</button>}
                 </form>
               );
             })}
@@ -84,7 +89,8 @@ export default async function EditStaff({ params }: { params: Promise<{ boaId: s
           </div>
 
           {/* add assignment */}
-          <form action={upsertAssignment} className="mt-4 grid grid-cols-2 gap-3 rounded-xl border border-line bg-canvas p-4">
+          {canEdit && (
+          <form action={upsertAssignment} className="mt-4 grid gap-3 rounded-xl border border-line bg-canvas p-4 sm:grid-cols-2">
             <input type="hidden" name="boa_id" value={boa.id} />
             <L label="Add to university">
               <select name="university_id" required className="filter-input w-full">
@@ -102,20 +108,29 @@ export default async function EditStaff({ params }: { params: Promise<{ boaId: s
               <input type="checkbox" name="receive_reminders" defaultChecked className="h-4 w-4 accent-[var(--color-accent)]" />
               <span className="font-ui text-sm text-ink">Receive reminders</span>
             </label>
-            <button className="col-span-2 rounded-full bg-accent px-5 py-2 font-ui text-sm font-semibold text-white transition-all hover:-translate-y-0.5">Add / update assignment</button>
+            <button className="rounded-full sm:col-span-2 bg-accent px-5 py-2 font-ui text-sm font-semibold text-white transition-all hover:-translate-y-0.5">Add / update assignment</button>
           </form>
+          )}
         </div>
       </Reveal>
 
       {/* admin-console access grant */}
       <Reveal delay={0.14} className="mt-6">
         <div className="card p-6">
-          <p className="mb-1 font-ui text-sm font-semibold text-ink">Admin console access</p>
+          <p className="mb-1 font-ui text-sm font-semibold text-ink">Read-only admin access</p>
           <p className="mb-4 font-ui text-sm text-muted">
-            Let this person open the Admin console and use the “← Admin” navigation. Off by default —
-            they otherwise see only their own university.
+            Let this person see the whole Admin console and every university — view only, no changes.
+            They keep full access to their own university&apos;s board. Off by default.
           </p>
-          {appUser ? (
+          {appUser && !canEdit ? (
+            <span
+              className={`rounded-full px-3 py-1 font-ui text-xs font-semibold ${
+                appUser.can_view_admin ? "bg-green-100 text-success" : "bg-line-soft text-muted"
+              }`}
+            >
+              {appUser.can_view_admin ? "Read-only access granted" : "No admin access"}
+            </span>
+          ) : appUser ? (
             <form action={setAdminAccess} className="flex items-center gap-3">
               <input type="hidden" name="boa_id" value={boa.id} />
               <input type="hidden" name="can_view_admin" value={(!appUser.can_view_admin).toString()} />
@@ -124,7 +139,7 @@ export default async function EditStaff({ params }: { params: Promise<{ boaId: s
                   appUser.can_view_admin ? "bg-green-100 text-success" : "bg-line-soft text-muted"
                 }`}
               >
-                {appUser.can_view_admin ? "Access granted" : "No access"}
+                {appUser.can_view_admin ? "Read-only access granted" : "No admin access"}
               </span>
               <button
                 className={`rounded-full border px-4 py-2 font-ui text-sm font-semibold transition-all hover:-translate-y-0.5 ${

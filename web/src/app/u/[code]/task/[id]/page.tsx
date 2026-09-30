@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requireAppUser, hasAdminAccess } from "@/lib/auth";
+import { notFound, redirect } from "next/navigation";
+import { requireUniversityAccess, isFullAdmin } from "@/lib/auth";
+import { ReadOnlyNotice } from "@/components/ReadOnlyNotice";
 import { createClient } from "@/lib/supabase/server";
 import { fmtIST } from "@/lib/format";
 import { StatusBadge, PriorityBadge } from "@/components/Badges";
@@ -14,8 +15,9 @@ const STATUS_OPTIONS = ["pending", "in_progress", "published", "blocked", "restr
 
 export default async function TaskDetail({ params }: { params: Promise<{ code: string; id: string }> }) {
   const { code, id } = await params;
-  const user = await requireAppUser();
-  const canEdit = hasAdminAccess(user);
+  const access = await requireUniversityAccess(code);
+  const canAdminEdit = isFullAdmin(access); // content Edit / Delete
+  const canRespond = access.canEdit; // status update + send-now (admin or this uni's staff)
   const supabase = await createClient();
 
   const { data: task } = await supabase
@@ -26,15 +28,17 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
   if (!task) notFound();
 
   const uni = task.universities as { name: string; code: string } | null;
+  // The task must be viewed under its own university (edit rights are per-university).
+  if (uni && uni.code !== code) redirect(`/u/${uni.code}/task/${id}`);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <Reveal>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Link href={`/u/${code}`} className="font-ui text-sm text-accent hover:underline">
             ← {uni?.name ?? "Board"}
           </Link>
-          {canEdit && (
+          {canAdminEdit && (
             <div className="flex items-center gap-2">
               <Link
                 href={`/u/${code}/task/${id}/edit`}
@@ -95,6 +99,10 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
         </div>
       </Reveal>
 
+      {!canRespond ? (
+        <ReadOnlyNotice what="update this task or send reminders" className="mt-6" />
+      ) : (
+      <>
       <Reveal delay={0.08}>
         <form action={updateTask} className="mt-6 card p-6 sm:p-8">
           <input type="hidden" name="task_id" value={task.id} />
@@ -132,6 +140,8 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
           <SendNowButton taskId={task.id} code={code} />
         </div>
       </Reveal>
+      </>
+      )}
     </div>
   );
 }

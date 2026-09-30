@@ -41,6 +41,11 @@
     font-family: var(--font-display);
     -webkit-font-smoothing: antialiased;
   }
+  /* Never let the page scroll sideways on small screens (wide tables scroll in
+     their own container). `clip` — unlike `hidden` — keeps the sticky header. */
+  body {
+    overflow-x: clip;
+  }
   ::selection {
     background: var(--color-accent);
     color: #fff;
@@ -96,6 +101,16 @@
   }
   .filter-input:focus {
     border-color: var(--color-accent);
+  }
+  .filter-input {
+    max-width: 100%;
+    min-width: 0;
+  }
+  /* Phones/tablets: 16px inputs — iOS Safari zooms the page on focus below 16px. */
+  @media (max-width: 1023px) {
+    .filter-input {
+      font-size: 16px;
+    }
   }
   /* animated hero grid / glow backdrop */
   .grid-bg {

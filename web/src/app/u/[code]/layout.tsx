@@ -39,12 +39,13 @@ export default async function UniversityLayout({
       <TopNav
         home={`/u/${code}`}
         email={user.email}
-        roleLabel={uni.name}
         backTo={hasAdminAccess(user) ? { href: "/admin", label: "Admin" } : undefined}
+        roleLabel={user.canEdit ? uni.name : `${uni.name} · View only`}
         items={[
           { href: `/u/${code}`, label: "Board" },
           { href: `/u/${code}/team`, label: "Team" },
           { href: `/u/${code}/reminders`, label: "My Reminders" },
+          { href: `/u/${code}/events`, label: "Events" },
           { href: `/u/${code}/tickets`, label: "Tickets" },
         ]}
       />

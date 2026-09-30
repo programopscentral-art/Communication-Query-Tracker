@@ -57,7 +57,7 @@ export default async function AdminHome() {
       <Reveal>
         <p className="eyebrow mb-2">Overview</p>
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">
+          <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">
             Communication Command Center
           </h1>
           <div className="flex items-center gap-4">
@@ -118,7 +118,7 @@ export default async function AdminHome() {
             </Link>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-canvas text-left font-ui text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th className="px-6 py-3">University</th>

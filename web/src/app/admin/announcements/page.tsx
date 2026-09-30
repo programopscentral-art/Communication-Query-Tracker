@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, isFullAdmin } from "@/lib/auth";
+import { ReadOnlyNotice } from "@/components/ReadOnlyNotice";
 import { createClient } from "@/lib/supabase/server";
 import { createAnnouncement, setAnnouncementActive } from "@/app/actions";
 import { fmtIST } from "@/lib/format";
@@ -15,7 +16,7 @@ type Ann = {
 };
 
 export default async function Announcements() {
-  await requireAdmin();
+  const canEdit = isFullAdmin(await requireAdmin());
   const supabase = await createClient();
 
   const [{ data: unis }, { data: rows }] = await Promise.all([
@@ -33,16 +34,17 @@ export default async function Announcements() {
       <Reveal>
         <Link href="/admin" className="font-ui text-sm text-accent hover:underline">← Overview</Link>
         <p className="eyebrow mb-2 mt-3">Announcement bar</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Promotional messages</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Promotional messages</h1>
         <p className="mt-2 font-ui text-sm text-muted">
           These flow in the animated bar shown to staff. Scope to one university, or leave blank for all.
         </p>
       </Reveal>
 
       <Reveal delay={0.06} className="mt-6">
+        {!canEdit ? <ReadOnlyNotice what="publish or change announcements" /> : (
         <form action={createAnnouncement} className="card space-y-3 p-6">
           <input name="message" required placeholder="Message…" className="filter-input w-full" />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <select name="university_id" className="filter-input w-full">
               <option value="">All universities (global)</option>
               {(unis ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -57,6 +59,7 @@ export default async function Announcements() {
             Publish to bar
           </button>
         </form>
+        )}
       </Reveal>
 
       <Reveal delay={0.1} className="mt-6 space-y-2">
@@ -68,13 +71,19 @@ export default async function Announcements() {
                 {a.universities?.name ?? "Global"} · {a.kind} · {fmtIST(a.created_at)}
               </p>
             </div>
-            <form action={setAnnouncementActive}>
-              <input type="hidden" name="id" value={a.id} />
-              <input type="hidden" name="active" value={(!a.active).toString()} />
-              <button className={`rounded-full border px-3 py-1.5 font-ui text-xs font-semibold ${a.active ? "border-line text-muted hover:border-danger hover:text-danger" : "border-accent text-accent"}`}>
-                {a.active ? "Deactivate" : "Activate"}
-              </button>
-            </form>
+            {canEdit ? (
+              <form action={setAnnouncementActive}>
+                <input type="hidden" name="id" value={a.id} />
+                <input type="hidden" name="active" value={(!a.active).toString()} />
+                <button className={`rounded-full border px-3 py-1.5 font-ui text-xs font-semibold ${a.active ? "border-line text-muted hover:border-danger hover:text-danger" : "border-accent text-accent"}`}>
+                  {a.active ? "Deactivate" : "Activate"}
+                </button>
+              </form>
+            ) : (
+              <span className={`rounded-full px-2.5 py-1 font-ui text-xs font-semibold ${a.active ? "bg-green-100 text-success" : "bg-line-soft text-muted"}`}>
+                {a.active ? "Active" : "Inactive"}
+              </span>
+            )}
           </div>
         ))}
         {anns.length === 0 && <p className="card px-5 py-10 text-center text-sm text-muted">No announcements yet.</p>}

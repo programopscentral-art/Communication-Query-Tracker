@@ -20,19 +20,19 @@ export function NewStaffForm({ unis }: { unis: { id: string; name: string }[] })
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Labeled label="Employee ID *"><input name="employee_id" required className="filter-input w-full" placeholder="NW10234" /></Labeled>
         <Labeled label="Full name *"><input name="name" required className="filter-input w-full" placeholder="Ravi Kumar" /></Labeled>
       </div>
       <Labeled label="Designation"><input name="designation" className="filter-input w-full" placeholder="BOA – Student Engagement" /></Labeled>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Labeled label="WhatsApp (+91…) *"><input name="whatsapp_e164" required className="filter-input w-full" placeholder="+919876543210" /></Labeled>
         <Labeled label="Login email"><input name="email" type="email" className="filter-input w-full" placeholder="ravi.k@nxtwave.co.in" /></Labeled>
       </div>
 
       <div className="rounded-xl border border-line bg-canvas p-4">
         <p className="eyebrow mb-3">Assignment</p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Labeled label="University">
             <select name="university_id" className="filter-input w-full">
               <option value="">— none —</option>
