@@ -19,6 +19,9 @@ admins schedule, track, and monitor everything.
 - Scope tightly: when asked for one thing ("just the logo", "only the date sorting"), change nothing else. Big features: explain the design + edge cases first, then build.
 - When something breaks, find and explain the **root cause** (reproduce it), then fix it. Show user-facing errors as clear inline messages, never the crash page.
 - The user tests on **production** too — remember prod only changes after a push + Vercel deploy.
+- After a push, check the deploy (GitHub commit status API, see below) and report it. When asked to "update claude.md", keep **this file** as the single store of project context (memory notes only point here).
+- Claude can't change Google Drive sharing or create Supabase / Google Cloud / Vercel credentials or settings — the user does those in the consoles (`docs/AUTH_SETUP.md`); give exact click-paths.
+- Never edit either Google Sheet — PingBoard only **reads** them.
 
 ## Environment / tooling notes
 
@@ -44,7 +47,9 @@ Secret **values** live only in git-ignored files + the Supabase/Vercel dashboard
 
 - **Tracker data sheet** (tasks): `16-e4LMiOMZxMenVMrDAIDBX651j4MxEJN3y2WihjUeg` — the comms team's **official** live sheet (replaced the old `1W6qHfLOP…` copy on 2026-08-13). Only tab **"Communication"** (gid `116249373`) is used: ~16.7k grid rows, ~10.1k real data rows. Other tabs (pivots, date-range snapshots, "Query", "Detail7-…") are ignored.
 - ⚠️ In that tab the **University column (F) header was overwritten as a second "Priority"** (Sep 2026). The importer copes (content detection), but ask the comms team to rename it back to "University".
-- **Staff sheet** (BOAs): `1ip-V2pQmqUhsmcctpLUhuQW6I4f_iWkBVz9v0pXu2MY` — historical only; staff are now managed **in-app**.
+- **Staff sheet** (BOAs, "University BOAs List — Intake Template", owned by programopscentral@nxtwave.in): `1ip-V2pQmqUhsmcctpLUhuQW6I4f_iWkBVz9v0pXu2MY` — historical only; staff are now managed **in-app**. Its flat format (one row per BOA × University, `docs/BOA_INTAKE_FORMAT.md`): Employee ID (stable key), Full Name, Designation, WhatsApp Number (+91 E.164), Login Email, University, Role (Primary/Backup), Team Scope (All/Student Engagement/Parent Communication), Receive Reminders (Yes/No), Status (Active/Inactive).
+- **Old tracker sheet** `1W6qHfLOP-moOd3sDEHuqRgrzTP6jdUTvLPOYho4AWOo` — retired 2026-08-13, don't reconnect.
+- **Login domain is `@nxtwave.co.in`** (note `.co.in`); the ops Google account `programopscentral@nxtwave.in` owns the sheets/Drive files but is not an app login.
 - **Google OAuth client** lives in Google Cloud project `communication-query-tracker`; redirect URI = `https://<ref>.supabase.co/auth/v1/callback`. Supabase → Auth → URL config must list the Vercel + localhost URLs.
 
 ---
@@ -121,7 +126,7 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 
 `generate_reminder_jobs(task)` precomputes `reminder_jobs` (fire_at = publish_at − offset) for each eligible BOA (assignment + `receive_reminders` + team_scope match), offsets precedence **task → university pref → global {15,10}**. Fires on task write, assignment change, and prefs change. Marking a task **published cancels its pending reminders**; setting it back regenerates them. `claim_due_reminders()` uses `FOR UPDATE SKIP LOCKED`. The **`send-reminders` edge function** drains due jobs via the provider. Manual "Send now" → `enqueue_manual_reminder`. **Reminders only exist when a university has an assigned active BOA.**
 
-⚠️ **Reminder sending is not live:** provider = mock and the reminder-drain cron is **not** scheduled (the only pg_cron job is the sheet sync). See `docs/REMINDER_ENGINE.md`.
+⚠️ **Reminder sending is not live:** provider = mock and the reminder-drain cron is **not** scheduled (pg_cron runs only the 3 jobs in "Scheduled jobs" below — none of them sends WhatsApp). See `docs/REMINDER_ENGINE.md`.
 
 ## Data source (Sheet ⇄ UI)
 
@@ -208,7 +213,7 @@ Throwaway script (scratchpad, or `scripts/_*.mjs` deleted afterwards) run via Po
 - **22 universities** — 18 seeded + JOY (Chennai), Testing University (staff: Ravi), Central Testing, and **"Chalapathyl"** (a sheet typo auto-created 2026-09-07, 2 tasks; should be merged into Chalapathy or fixed in the sheet). "Takshasila" is displayed as **Takshashila** (code unchanged).
 - **806 events** (Oct 2025 – Aug 2026, 12 tabs); campus names: CIET → Chalapathy, Chevella / BITs Chevella → NIAT-Chevella, Takshashila → Takshashila. 311 overdue reports overall (mostly Oct–Dec 2025).
 - **~10.3k tasks** (the Communication sync scans ~10.2k sheet rows, all mapped) + 25 UI-authored. **24 sheet-origin rows are no longer in the sheet** (edited/deleted there) and still show in the app.
-- Last deploy: commit `9511286` (Event Reports, read-only admin, reminders, export, responsive UI) — Vercel success 2026-09-30.
+- Last feature deploy: commit `9511286` (Event Reports, read-only admin, reminders, export, responsive UI) — Vercel success 2026-09-30; docs commit `1538deb` also deployed.
 - Sheet data-entry typos (imported as-is): entry dates with year 6026, publish dates with year 206, ~224 blank/unparseable publish times.
 - ~76 staff across 21 universities (4 from the original import skipped for blank phones).
 
