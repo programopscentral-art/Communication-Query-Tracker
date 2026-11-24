@@ -22,15 +22,14 @@ Comms Team ──enters rows──▶  Supabase Postgres (source of truth)
 
 - **DB / Auth / Realtime / Cron:** Supabase (Postgres 15, pg_cron, RLS)
 - **Web:** Next.js (App Router) — role-gated BOA + Admin UIs
-- **Reminders:** trigger precomputes `reminder_jobs`; `pg_cron` drains due jobs every minute using `FOR UPDATE SKIP LOCKED` (idempotent, parallel-safe)
-- **WhatsApp:** provider-agnostic interface (mock → Meta Cloud API / BSP)
+- **Reminders:** trigger precomputes `reminder_jobs`; `pg_cron` calls `/api/cron/send-whatsapp` every minute (only when something is due), which claims jobs with `FOR UPDATE SKIP LOCKED` (idempotent, parallel-safe)
+- **WhatsApp:** Meta WhatsApp Cloud API (mock until configured) — setup in `docs/WHATSAPP_SETUP.md`
 
 ## Layout
 
 ```
 supabase/
   migrations/          SQL migrations (schema, RLS, reminder engine, seed)
-  functions/           Edge Functions (send-reminders drainer)
 scripts/               Sheet import + ops scripts
 web/                   Next.js app (BOA + Admin UIs)
 .env.example           Environment template

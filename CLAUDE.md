@@ -40,6 +40,7 @@ Secret **values** live only in git-ignored files + the Supabase/Vercel dashboard
 - `web/.env.local` — `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SHEET_ID`, `NEXT_PUBLIC_STAFF_SHEET_ID`, plus server-only `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` (for testing `/api/cron/sync-sheet` locally)
 - root `.env` — above + `SUPABASE_DB_URL`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`, `GOOGLE_SHEET_ID`, `GOOGLE_STAFF_SHEET_ID`, `WHATSAPP_PROVIDER`, `CRON_SECRET`
 - **Vercel env (Production, all set):** the `NEXT_PUBLIC_*` vars + **server-only** `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET`. Never give those two a `NEXT_PUBLIC_` prefix. Env changes need a **Redeploy** to take effect.
+- **WhatsApp (Vercel, server-only, set by the user — see `docs/WHATSAPP_SETUP.md`):** `WHATSAPP_PROVIDER=meta`, `META_WABA_PHONE_NUMBER_ID`, `META_WABA_TOKEN`, `META_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`; optional `META_TEMPLATE_LANG` (default `en`), `META_TEMPLATE_REMINDER`/`META_TEMPLATE_EVENT` (default `pingboard_publish_reminder`/`pingboard_event_report`), `META_TEMPLATE_URL_BUTTON` (`on`), `META_GRAPH_VERSION` (`v23.0`). Without them the provider is **mock** (logs only). Localhost has none → mock.
 - `CRON_SECRET` exists in 4 places: root `.env`, `web/.env.local`, Vercel, and Supabase **Vault** (`pingboard_cron_secret`). To rotate: change it in `.env` → `node scripts/set-cron-secret.mjs` → update Vercel + `web/.env.local` → redeploy.
 - ⚠️ The service_role key + DB password were pasted into chat during setup — **rotate them** in Supabase, then update root `.env`, `web/.env.local`, and Vercel.
 
@@ -65,7 +66,10 @@ Supabase Postgres + Auth + RLS + pg_cron + pg_net + Vault · framer-motion · `@
 ```
 web/                          Next.js app (Vercel root dir)
   src/app/                    routes (admin/*, u/[code]/*, login, auth/callback, blocked)
-  src/app/api/cron/           sync-sheet · sync-events · event-nudges (CRON_SECRET bearer, lib/cronAuth.ts)
+  src/app/api/cron/           sync-sheet · sync-events · event-nudges · send-whatsapp (CRON_SECRET bearer, lib/cronAuth.ts)
+  src/app/api/whatsapp/webhook  Meta delivery receipts (public path; X-Hub-Signature-256 checked with META_APP_SECRET)
+  src/app/admin/whatsapp/     WhatsApp control page (switch, test mode, quiet hours, test send, stats, templates)
+  src/app/whatsapp-actions.ts WhatsApp server actions
   src/app/admin/events/       Event Reports hub, new, [id], export (route.ts → xlsx/csv)
   src/app/u/[code]/events/    staff Event Reports list + [id] report form
   src/app/events-actions.ts   Event server actions (separate "use server" file)
@@ -73,13 +77,13 @@ web/                          Next.js app (Vercel root dir)
   src/components/             UI (TopNav, Footer, ViewTabs, DateSearch, UniSelect, ParamSelect, ReadOnlyNotice,
                               StaffRowActions, events/EventForms + EventBits, …)
   src/lib/                    auth, supabase/{server,client,middleware,admin}, time, format, sheetSync,
-                              eventSync, eventNudges, eventQueries, eventOptions, events, adminEmail, cronAuth
+                              eventSync, eventNudges, eventQueries, eventOptions, events, adminEmail, cronAuth,
+                              whatsapp (Meta client + error map), whatsappMessages (template text + params), whatsappSender
   public/                     niat-logo.png (full), niat-shield.png (nav mark)
-supabase/migrations/          0001–0029 SQL (source of truth for schema)
-supabase/functions/           send-reminders edge function + _shared providers/message
+supabase/migrations/          0001–0032 SQL (source of truth for schema)
 scripts/                      db.mjs, db-push.mjs, import-tracker.mjs, import-staff.mjs,
                               discover-gids.mjs, set-cron-secret.mjs
-docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_INTAKE_FORMAT, templates/
+docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, WHATSAPP_SETUP, BOA_INTAKE_FORMAT, templates/
 ```
 
 ---
@@ -94,7 +98,7 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 - **event_nudges** (`event_id, boa_id, stage[due|overdue], status[queued|sent|failed|skipped], whatsapp_e164, message`) UNIQUE(event_id, stage, boa_id).
 - **tasks** — one comm per row: `team, entry_date, update_type, category, priority (text), university_id, channel, content_type, target_audience, message_content, poster_drive_link, publish_at (UTC), special_instructions, execution_status (enum execution_status), actual_publish_date, issue_blocker, reminder_offsets_min[], source_key UNIQUE, source_row, source_gid, origin[sheet|ui], created_source_by, updated_at`.
 - **task_sheet_state** (`source_key PK → tasks.source_key ON DELETE CASCADE, status, actual, issue, seen_at`) — what the SHEET last showed per row (for the three-way merge). Separate table so maintaining it never bumps `tasks.updated_at`, writes audit rows, or regenerates reminders.
-- **reminder_jobs** (`task_id, boa_id, offset_min, fire_at, status[pending|sending|sent|failed|skipped|cancelled], attempts, claimed_at, …`) UNIQUE(task_id,boa_id,offset_min).
+- **reminder_jobs** (`task_id, boa_id, offset_min, fire_at, status[pending|sending|sent|failed|skipped|cancelled], attempts, claimed_at, wa_message_id, error, skip_reason, delivery_status[sent|delivered|read|failed], delivery_at, …`) UNIQUE(task_id,boa_id,offset_min). `event_nudges` has the same sender columns (+ `sending` status).
 - **reminder_prefs** (`university_id, offsets_min[], auto_enabled`), **app_settings** (`data_source_mode[sheet|ui], default_reminder_offsets_min, allowed_domain, last_sheet_sync_*, events_sheet_id, last_event_sync_*, event_nudge_enabled/after_days/escalate_after_days/lookback_days, last_event_nudge_*`).
 - **tickets**, **announcements**, **internal_messages**, **audit_log**, **ref_*** dropdown tables.
 - Views: `task_status_by_university`, `v_university_history`, `v_staff_activity`, `v_recent_activity` (actor falls back to "System"), `reminder_job_details`, and for events `v_event_month_stats`, `v_event_overdue`, `v_event_options`, `v_event_campus_names`, `v_event_date_issues`, `v_event_duplicate_keys` (all `security_invoker=on`, so RLS applies). Use these instead of fetching rows — PostgREST caps plain selects at 1000 rows.
@@ -102,8 +106,8 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 - FK delete rules on `boas`: `university_boas` CASCADE, `reminder_jobs` CASCADE, `app_users.boa_id` SET NULL.
 - Triggers on `tasks` UPDATE: `set_updated_at` (History "last activity" reads it), `audit_task_change_trg` (outcome + content fields only), `tasks_reminder_sync_trg` (only on publish_at/university/team/status/offsets).
 
-### Migrations (0001–0029, all applied to the live DB)
-0001 schema · 0002 auth(domain-lock trigger) · 0003 RLS · 0004 reminder engine · 0005 seed(18 unis + dropdowns) · 0006 views · 0007 reminder_prefs+precedence+manual-send · 0008 history(audit trigger+views) · 0009 tickets+announcements · 0010 admin_view_access(can_view_admin) · 0011 sheet_refs · 0012 staff_directory · 0013 ui_authoring(ref tables, priority→text, data_source_mode, origin) · 0014 ticket_meta · 0015 autolink_boa · 0016 reminder_view fire_at · 0017 regen_on_assignment · 0018 existing_keys_rpc · 0019 sync_state_rpc · 0020 task_edit_delete_audit · 0021 sheet_auto_sync (`task_sheet_state` + backfill, RPC allows service_role, `last_sheet_sync_*`) · 0022 schedule_sheet_sync (pg_cron job `pingboard-sheet-sync`, applied 2026-09-28) · 0023 read_only_admin (`has_admin_read()` + `*_viewer_read` SELECT policies on 13 tables, `admin_emails.level`, sign-up honours level) · 0024 events (table, guard trigger, RLS, events settings, campus aliases) · 0025 event_views · 0026 campus_name_fixes (Takshasila→"Takshashila"; all Chevella spellings → NIAT-Chevella; CIET → Chalapathy) · 0027 schedule_event_sync (`pingboard-event-sync`, applied 2026-09-30) · 0028 event_nudges (`event_last_day`, nudge settings + table, `v_event_overdue`) · 0029 schedule_event_nudges (`pingboard-event-nudges`, applied 2026-09-30).
+### Migrations (0001–0032)
+0001 schema · 0002 auth(domain-lock trigger) · 0003 RLS · 0004 reminder engine · 0005 seed(18 unis + dropdowns) · 0006 views · 0007 reminder_prefs+precedence+manual-send · 0008 history(audit trigger+views) · 0009 tickets+announcements · 0010 admin_view_access(can_view_admin) · 0011 sheet_refs · 0012 staff_directory · 0013 ui_authoring(ref tables, priority→text, data_source_mode, origin) · 0014 ticket_meta · 0015 autolink_boa · 0016 reminder_view fire_at · 0017 regen_on_assignment · 0018 existing_keys_rpc · 0019 sync_state_rpc · 0020 task_edit_delete_audit · 0021 sheet_auto_sync (`task_sheet_state` + backfill, RPC allows service_role, `last_sheet_sync_*`) · 0022 schedule_sheet_sync (pg_cron job `pingboard-sheet-sync`, applied 2026-09-28) · 0023 read_only_admin (`has_admin_read()` + `*_viewer_read` SELECT policies on 13 tables, `admin_emails.level`, sign-up honours level) · 0024 events (table, guard trigger, RLS, events settings, campus aliases) · 0025 event_views · 0026 campus_name_fixes (Takshasila→"Takshashila"; all Chevella spellings → NIAT-Chevella; CIET → Chalapathy) · 0027 schedule_event_sync (`pingboard-event-sync`, applied 2026-09-30) · 0028 event_nudges (`event_last_day`, nudge settings + table, `v_event_overdue`) · 0029 schedule_event_nudges (`pingboard-event-nudges`, applied 2026-09-30) · 0030 whatsapp_sender (settings, lateness-guarded claims, delivery receipts, revive-on-reschedule, sender functions locked to service_role; **applied 2026-10-27**, retired the 4,236-job backlog) · 0031 reminder_triggers_definer (**bug fix: staff task updates failed under RLS** — reminder triggers now SECURITY DEFINER; tested, **not yet applied**) · 0032 schedule_whatsapp_sender (`pingboard-whatsapp-send` every minute; **apply only after the deploy is live**).
 
 **Apply a migration:** a small node script using `connect()` from `scripts/db.mjs` + `readFileSync` of the `.sql` (or `npm run db:push` for all). Migrations were always applied directly to the live DB; the Supabase CLI was never linked. Before applying, check which triggers the change fires (see above) so a backfill doesn't flood History or regenerate reminders.
 
@@ -112,7 +116,7 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 ## Auth & access (domain-locked)
 
 - Google SSO restricted to **@nxtwave.co.in**, enforced 3 ways: Google consent (Internal), `lib/supabase/middleware.ts` (proxy) + `auth/callback`, and DB trigger `handle_new_user` (0002/0012) that rejects other domains + provisions `app_users` (role from `admin_emails`, `boa_id` matched by email).
-- Public (no-login) paths in `middleware.ts`: `/login`, `/auth`, `/blocked`, `/api/cron` (self-authorizes with CRON_SECRET).
+- Public (no-login) paths in `middleware.ts`: `/login`, `/auth`, `/blocked`, `/api/cron` (self-authorizes with CRON_SECRET), `/api/whatsapp/webhook` (Meta signature).
 - Helpers in `lib/auth.ts`: `requireAppUser()` (cached), `requireAdmin()` (full **or** read-only admin — for pages), `requireWriteAdmin()` (full admin only — use in every admin **write** action; throws `READ_ONLY_MESSAGE`), `isFullAdmin()`, `isReadOnlyAdmin()`, `hasAdminAccess()`, `requireUniversityAccess(code)` → `{...user, canEdit}` (cached; full admins + that university's staff can edit; read-only admins may **view** any board).
 - **Two admin levels:**
   - **Full admin** (`role = 'admin'`): everything. DB `is_admin()` is true only for these, so RLS writes are full-admin-only.
@@ -124,9 +128,11 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 
 ## Reminder engine
 
-`generate_reminder_jobs(task)` precomputes `reminder_jobs` (fire_at = publish_at − offset) for each eligible BOA (assignment + `receive_reminders` + team_scope match), offsets precedence **task → university pref → global {15,10}**. Fires on task write, assignment change, and prefs change. Marking a task **published cancels its pending reminders**; setting it back regenerates them. `claim_due_reminders()` uses `FOR UPDATE SKIP LOCKED`. The **`send-reminders` edge function** drains due jobs via the provider. Manual "Send now" → `enqueue_manual_reminder`. **Reminders only exist when a university has an assigned active BOA.**
+`generate_reminder_jobs(task)` precomputes `reminder_jobs` (fire_at = publish_at − offset) for each eligible BOA (assignment + `receive_reminders` + team_scope match), offsets precedence **task → university pref → global {15,10}**. Fires on task write, assignment change, and prefs change. Marking a task **published cancels its pending reminders**; un-publishing / rescheduling into the future revives cancelled or skipped ones. Manual "Send now" → `enqueue_manual_reminder`. **Reminders only exist when a university has an assigned active BOA.**
 
-⚠️ **Reminder sending is not live:** provider = mock and the reminder-drain cron is **not** scheduled (pg_cron runs only the 3 jobs in "Scheduled jobs" below — none of them sends WhatsApp). See `docs/REMINDER_ENGINE.md`.
+**WhatsApp sender** (`lib/whatsappSender.ts` via `/api/cron/send-whatsapp`; full flow in `docs/REMINDER_ENGINE.md`): master switch `app_settings.whatsapp_enabled` (default **off**) · **test mode** (default on; only `whatsapp_test_numbers` receive) · **quiet hours** 22:00–08:00 IST (due reminders skipped, not delayed) · `claim_due_reminders(limit, max_late_min)` skips anything > 5 min late (so no backlog blast) and claims with `SKIP LOCKED` · skips published tasks / complete reports / inactive staff · temporary Meta errors retry (max 4), per-recipient errors fail, setup errors (bad token, missing template) stop the run and show red on Admin → WhatsApp · report reminders (`claim_event_nudges`) expire after 24 h · receipts via the webhook → `apply_wa_status` (sent → delivered → read, never backwards). Templates' exact text lives in `lib/whatsappMessages.ts` (`TEMPLATE_TEXT`) — change the code and the Meta template together.
+- Meta helpers: `lib/whatsapp.ts` (`waConfig`, `sendTemplate`, `WaError{permanent,fatal}` with a plain-English map of Meta error codes, `cleanParam` — Meta rejects params with new lines / tabs / >4 spaces).
+- ⚠️ **Status (2026-10-27):** code built + tested (45 unit/simulation checks, 14 rolled-back SQL checks, 6 webhook checks); provider still **mock** until the user finishes `docs/WHATSAPP_SETUP.md`; switch is **off**; 0031 + 0032 not applied yet.
 
 ## Data source (Sheet ⇄ UI)
 
@@ -154,6 +160,7 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 | `pingboard-sheet-sync` | `*/10 * * * *` | `/api/cron/sync-sheet` | Communication sheet → tasks |
 | `pingboard-event-sync` | `3,18,33,48 * * * *` | `/api/cron/sync-events` | Event Reports sheet → events |
 | `pingboard-event-nudges` | `30 4 * * *` (10:00 IST) | `/api/cron/event-nudges` | queue reminders for overdue reports |
+| `pingboard-whatsapp-send` *(0032, not yet scheduled)* | `* * * * *` — but only calls Vercel when the switch is on **and** something is due | `/api/cron/send-whatsapp` | send due WhatsApp reminders |
 
 - Each job calls `net.http_get` with `Authorization: Bearer <Vault pingboard_cron_secret>`; routes check it with `refuseCron()` (`lib/cronAuth.ts`), use the service-role client, and record `last_*_sync_*` / `last_event_nudge_*` in `app_settings` (shown on the Source / Events pages).
 - **Adding a job:** new route under `app/api/cron/` using `refuseCron` → a migration that `cron.schedule(...)`s the prod URL → push → **apply the migration only after the deploy is live** (otherwise it 404s every run) → fire it once from SQL and read `net._http_response` to confirm a 200.
@@ -167,12 +174,12 @@ docs/                         SYSTEM_DESIGN, AUTH_SETUP, REMINDER_ENGINE, BOA_IN
 - **Identity:** trusted Unique Key (only if unique in the whole sheet — June/July have duplicates, April/Aug have none) → `fingerprint` (sheet values + `#n` for exact duplicates) → soft match to an app-created event (university + date + title) so a later sheet copy **links**, not duplicates. Keys/fingerprints moving between rows are freed first (unique constraints).
 - **Merge:** per-field three-way (`sheet_seen`): app edits kept unless the sheet changes that field; on first link a blank sheet cell never wipes app data. Rows gone from the sheet get `sheet_missing_since` (never auto-deleted; skipped if the read looks partial). Unknown campus names are **never auto-created** — map them on the hub ("Campus names in the sheet"), which moves the alias.
 - **Report complete** = 7 key fields filled (`REQUIRED_REPORT_KEYS`, "NA" counts). **Overdue** = incomplete and `event_last_day` ≥ `event_nudge_after_days` (2) ago.
-- **Reminders** (`lib/eventNudges.ts`, daily 10:00 IST via `/api/cron/event-nudges`, or Preview / Queue now on the hub): due after 2 days, escalated after 7, only events from the last 45 days (no backlog spam); recipients = university's active staff with `receive_reminders` in Student Engagement/all scope; one row per (event, stage, staff). Rows stay **queued** until the WhatsApp sender exists — it must only send recent rows (expire old queued ones).
+- **Reminders** (`lib/eventNudges.ts`, daily 10:00 IST via `/api/cron/event-nudges`, or Preview / Queue now on the hub): due after 2 days, escalated after 7, only events from the last 45 days (no backlog spam); recipients = university's active staff with `receive_reminders` in Student Engagement/all scope; one row per (event, stage, staff). Queued rows are sent by the WhatsApp sender within a minute (template `pingboard_event_report`); rows queued > 24 h ago are expired, never sent.
 - **Export** (`/admin/events/export?…&format=xlsx|csv`, full + read-only admins): current filters, sheet column layout + status/source/link; pages past 1000 rows; CSV has UTF-8 BOM + formula guard. **Bulk Zoho** (full admins): row checkboxes join `form="bulk-zoho"`.
 
 ## Features / routes
 
-- **Admin** (`/admin/*`): Overview (stats), ＋New (author task, multi-university fan-out, dynamic dropdowns), Schedule (Yesterday/Today/Upcoming + uni filter + **date picker**), Tasks, Source (mode + Sync now + last-sync status), Staff (directory with inline **Edit / Activate·Deactivate / guarded Delete**, + new/edit, Admin Access tab), Tickets (triage + tag + **date picker** on raised date), Reminders (Today/Tomorrow/Upcoming + date picker + uni filter), History (university rollup + activity feed with **date picker**, 200-row cap for a day), Comms (internal messages), Announcements.
+- **Admin** (`/admin/*`): Overview (stats), ＋New (author task, multi-university fan-out, dynamic dropdowns), Schedule (Yesterday/Today/Upcoming + uni filter + **date picker**), Tasks, Source (mode + Sync now + last-sync status), Staff (directory with inline **Edit / Activate·Deactivate / guarded Delete**, + new/edit, Admin Access tab), Tickets (triage + tag + **date picker** on raised date), Reminders (Today/Tomorrow/Upcoming + date picker + uni filter; status + delivery receipt + skip/fail reason), **WhatsApp** (switch, test mode, quiet hours, test message, today's stats, failures, setup checklist, template text with Copy), History (university rollup + activity feed with **date picker**, 200-row cap for a day), Comms (internal messages), Announcements.
 - **Admin Events** (`/admin/events`): month/university/status/Zoho filters, completion + overdue stats, per-university table, event list with bulk Zoho, Excel/CSV export, sheet sync status + Sync now, report reminders panel, data quality (campus mapping, removed rows, dates, duplicate keys); `/admin/events/new` (fan-out per university), `/admin/events/[id]` (details, report, provenance, delete).
 - **University** (`/u/[code]/*`): Board (overdue-reports banner, reminder-timing control, Yesterday/Today/Upcoming), Team, My Reminders, **Events** (list by month + report form), Tickets. Announcement bar. Task detail: status update, Send-now, View-in-Sheet, **admin-only Edit/Delete** (audited).
 - Date picker = shared `DateSearch` component (`?date=YYYY-MM-DD`, IST day via `dateWindow`; clears `?view=`, and `ViewTabs` clears `?date=`).
@@ -219,7 +226,7 @@ Throwaway script (scratchpad, or `scripts/_*.mjs` deleted afterwards) run via Po
 
 ## Outstanding / TODO
 
-1. **WhatsApp go-live** — provider (Meta/BSP) + approved template + schedule the reminder-drain cron (`docs/REMINDER_ENGINE.md`). Currently mock. The sender must also drain `event_nudges` (queued, recent only).
+1. **WhatsApp go-live** (code done 2026-10-27) — user: Meta setup per `docs/WHATSAPP_SETUP.md` (business verification, number, System User token, payment, 2 templates, Vercel keys, webhook). Claude: apply **0031** (needs the user's OK — auto-mode blocked the prod DB change), after deploy apply **0032**, then test → test mode with 2–3 staff → live. Ideas not built: combine several posts due at the same minute into one message; per-staff opt-out.
 2. **Vercel Hobby → Pro** before real rollout (ToS + caps + cold starts); then change the sheet sync to `*/5`.
 3. **Rotate** the exposed service_role key + DB password (update root `.env`, `web/.env.local`, Vercel).
 4. **Data clean-up (needs the user's call):** merge/fix "Chalapathyl"; review the 24 orphan sheet rows; ask comms to rename Communication column F back to "University"; events sheet — 6 duplicate Unique Keys, 3 unreadable dates ("20226").

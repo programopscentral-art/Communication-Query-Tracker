@@ -7,6 +7,11 @@ to a phased development plan. It reflects decisions made so far: Supabase as the
 source of truth, a precomputed reminder queue drained by cron, an Employee-ID-keyed
 dynamic sheet sync, and a provider-agnostic WhatsApp sender.
 
+> **Update (2026-10-27):** the sender is no longer a Supabase Edge Function. It is the
+> Next.js route `/api/cron/send-whatsapp` (called by pg_cron every minute, only when
+> something is due), using the Meta WhatsApp Cloud API. See `docs/REMINDER_ENGINE.md`
+> and `docs/WHATSAPP_SETUP.md`; read "Edge Function" below as that route.
+
 ---
 
 ## 1. Problem & goals

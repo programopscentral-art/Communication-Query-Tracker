@@ -19,6 +19,9 @@ type Job = {
   content_type: string | null;
   university_name: string;
   university_code: string;
+  skip_reason: string | null;
+  error: string | null;
+  delivery_status: string | null;
 };
 
 const TONE: Record<string, string> = {
@@ -50,7 +53,7 @@ export default async function ReminderLog({
 
   let q = supabase
     .from("reminder_job_details")
-    .select("job_id, status, offset_min, attempts, fire_at, publish_at, boa_name, channel, content_type, university_name, university_code")
+    .select("job_id, status, offset_min, attempts, fire_at, publish_at, boa_name, channel, content_type, university_name, university_code, skip_reason, error, delivery_status")
     .order("fire_at", { ascending: true })
     .limit(300);
   if (win.gte) q = q.gte("fire_at", win.gte);
@@ -105,7 +108,15 @@ export default async function ReminderLog({
                     <td className="px-4 py-3 text-ink">{fmtIST(j.fire_at)}</td>
                     <td className="px-4 py-3 tabular-nums">{j.offset_min}m</td>
                     <td className="px-4 py-3 text-muted">{fmtIST(j.publish_at)}</td>
-                    <td className={`px-6 py-3 font-ui font-semibold ${TONE[j.status] ?? ""}`}>{j.status}</td>
+                    <td className="px-6 py-3 font-ui">
+                      <span className={`font-semibold ${TONE[j.status] ?? ""}`}>{j.status}</span>
+                      {j.status === "sent" && j.delivery_status && j.delivery_status !== "sent" && (
+                        <span className="ml-1 text-xs text-muted">· {j.delivery_status}</span>
+                      )}
+                      {(j.skip_reason || (j.status === "failed" && j.error)) && (
+                        <span className="block max-w-[16rem] text-xs text-muted">{j.status === "failed" ? j.error : j.skip_reason}</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {jobs.length === 0 && (
