@@ -1,4 +1,15 @@
 import { STATUS_LABEL, STATUS_STYLES, PRIORITY_STYLES } from "@/lib/format";
+import { formatBatches } from "@/lib/batches";
+
+/** Small "Batches: …" tag for board / Schedule rows — shown only when batches are set. */
+export function BatchTag({ batches }: { batches: string[] | null | undefined }) {
+  if (!batches || batches.length === 0) return null;
+  return (
+    <span className="inline-block shrink-0 rounded-full bg-line-soft px-2 py-0.5 font-ui text-[11px] text-muted">
+      Batches: {formatBatches(batches)}
+    </span>
+  );
+}
 
 export function StatusBadge({ status }: { status: string }) {
   return (

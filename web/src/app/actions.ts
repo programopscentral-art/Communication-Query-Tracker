@@ -8,6 +8,7 @@ import { requireAppUser, requireAdmin, requireWriteAdmin, isFullAdmin, READ_ONLY
 import { adminEmailProblem } from "@/lib/adminEmail";
 import { runSheetSync, describeSync, recordSyncStatus } from "@/lib/sheetSync";
 import { toE164 } from "@/lib/format";
+import { batchesFromForm } from "@/lib/batches";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
@@ -135,6 +136,7 @@ export async function updateTaskFull(formData: FormData) {
     poster_drive_link: s(formData, "poster_drive_link") || null,
     publish_at: istLocalToUTC(s(formData, "publish_at") || null),
     special_instructions: s(formData, "special_instructions") || null,
+    batches: batchesFromForm(formData.getAll("batches")),
   };
   const { error } = await supabase.from("tasks").update(patch).eq("id", id);
   if (error) throw new Error(error.message);
@@ -525,6 +527,7 @@ const REF_TABLES: Record<string, string> = {
   channel: "ref_channel",
   content_type: "ref_content_type",
   target_audience: "ref_target_audience",
+  batch: "ref_batch",
 };
 
 // IST wall-clock (from <input type=datetime-local>) → UTC ISO. India = UTC+5:30.
@@ -603,6 +606,7 @@ export async function createTaskEntry(formData: FormData) {
     poster_drive_link: s(formData, "poster_drive_link") || null,
     publish_at,
     special_instructions: s(formData, "special_instructions") || null,
+    batches: batchesFromForm(formData.getAll("batches")), // same batches for every university
     // Response fields are owned by the university staff — always start clean,
     // regardless of anything sent from the client.
     execution_status: "pending" as const,

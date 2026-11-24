@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { fmtIST } from "@/lib/format";
 import { istWindow, dateWindow, isViewKey, type ViewKey } from "@/lib/time";
-import { StatusBadge, PriorityBadge } from "@/components/Badges";
+import { StatusBadge, PriorityBadge, BatchTag } from "@/components/Badges";
 import { Reveal } from "@/components/ui/Reveal";
 import { ViewTabs } from "@/components/ViewTabs";
 import { UniSelect } from "@/components/UniSelect";
@@ -28,7 +28,7 @@ export default async function AdminSchedule({
   const { gte, lt } = dateActive ? dateWindow(sp.date!) : istWindow(view);
   let q = supabase
     .from("tasks")
-    .select("id, priority, channel, content_type, team, publish_at, execution_status, source_gid, source_row, universities(name, code)", { count: "exact" })
+    .select("id, priority, channel, content_type, team, publish_at, execution_status, source_gid, source_row, batches, universities(name, code)", { count: "exact" })
     .order("publish_at", { ascending: dateActive ? true : view !== "yesterday", nullsFirst: false });
   if (gte) q = q.gte("publish_at", gte);
   if (lt) q = q.lt("publish_at", lt);
@@ -78,8 +78,9 @@ export default async function AdminSchedule({
                           <p className="truncate font-ui text-sm font-semibold text-ink">
                             {u?.name ?? "—"}
                           </p>
-                          <p className="truncate text-xs text-muted">
-                            {[t.channel, t.content_type, t.team].filter(Boolean).join(" · ")}
+                          <p className="flex min-w-0 items-center gap-2 text-xs text-muted">
+                            <span className="truncate">{[t.channel, t.content_type, t.team].filter(Boolean).join(" · ")}</span>
+                            <BatchTag batches={t.batches as string[] | null} />
                           </p>
                         </div>
                       </div>

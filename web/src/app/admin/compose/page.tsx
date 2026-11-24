@@ -5,6 +5,7 @@ import { createTaskEntry } from "@/app/actions";
 import { Reveal } from "@/components/ui/Reveal";
 import { DynamicSelect, type Opt } from "@/components/DynamicSelect";
 import { UniversityMultiSelect } from "@/components/UniversityMultiSelect";
+import { BatchMultiSelect } from "@/components/BatchMultiSelect";
 import { MessageField } from "@/components/MessageField";
 
 async function refOpts(supabase: Awaited<ReturnType<typeof createClient>>, table: string): Promise<Opt[]> {
@@ -25,7 +26,7 @@ export default async function Compose() {
   }
   const supabase = await createClient();
 
-  const [team, updateType, category, priority, channel, contentType, audience, unis] = await Promise.all([
+  const [team, updateType, category, priority, channel, contentType, audience, unis, batches] = await Promise.all([
     refOpts(supabase, "ref_team"),
     refOpts(supabase, "ref_update_type"),
     refOpts(supabase, "ref_category"),
@@ -34,6 +35,7 @@ export default async function Compose() {
     refOpts(supabase, "ref_content_type"),
     refOpts(supabase, "ref_target_audience"),
     supabase.from("universities").select("id, name").order("name"),
+    refOpts(supabase, "ref_batch"),
   ]);
   const uniOpts: Opt[] = (unis.data ?? []).map((u) => ({ value: u.id as string, label: u.name as string }));
 
@@ -59,6 +61,11 @@ export default async function Compose() {
             <div className="sm:col-span-2">
               <Field label="Universities * (All or selected)">
                 <UniversityMultiSelect options={uniOpts} />
+              </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <Field label="Batches (optional — every selected university gets the same batches)">
+                <BatchMultiSelect options={batches} />
               </Field>
             </div>
             <Field label="Channel"><DynamicSelect name="channel" kind="channel" options={channel} /></Field>

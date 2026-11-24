@@ -10,6 +10,7 @@ import { Reveal } from "@/components/ui/Reveal";
 import { SendNowButton } from "@/components/SendNowButton";
 import { ViewInSheet } from "@/components/ViewInSheet";
 import { DeleteTaskButton } from "@/components/DeleteTaskButton";
+import { formatBatches } from "@/lib/batches";
 
 const STATUS_OPTIONS = ["pending", "in_progress", "published", "blocked", "restricted"];
 /** University staff pick one final status; once it's no longer pending it's locked (DB-enforced, migration 0034). */
@@ -76,6 +77,7 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
             <Field label="Channel" value={task.channel} />
             <Field label="Content Type" value={task.content_type} />
             <Field label="Target Audience" value={task.target_audience} />
+            <Field label="Batches" value={formatBatches(task.batches as string[] | null)} />
             <Field label="Publish At (IST)" value={fmtIST(task.publish_at)} />
             <Field label="Actual Publish" value={fmtIST(task.actual_publish_date)} />
           </dl>

@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseBatches, sameBatches } from "@/lib/batches";
 
 // Server-side port of scripts/import-tracker.mjs. Runs under the admin's RLS.
 // Only writes the DELTA (new / previously-UI rows), so it's fast and can never
@@ -53,6 +54,7 @@ const H: Record<string, string[]> = {
   poster: ["Poster Drive link", "Poster Drive Link", "Poster"],
   publish_at: ["Publish At (Date & Time)", "Publish At"], special: ["Special Instructions"],
   status: ["Execution Status", "Status"], actual: ["Actual Publish Date"], issue: ["Issue / Blocker", "Issue/Blocker"],
+  batch: ["Batch", "Batches"], // OPTIONAL — when the column is missing the sync behaves exactly as before
 };
 const colIndex = (header: string[], names: string[]) => {
   for (const n of names) {
@@ -81,7 +83,7 @@ function detectUniversityCol(grid: string[][], hi: number, isUni: (v: string) =>
   return best;
 }
 
-export type SyncResult = { inserted: number; updated: number; created: number; preserved: number; scanned: number; skipped: number };
+export type SyncResult = { inserted: number; updated: number; batches: number; created: number; preserved: number; scanned: number; skipped: number };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function runSheetSync(supabase: SupabaseClient<any>): Promise<SyncResult> {
@@ -144,6 +146,7 @@ export async function runSheetSync(supabase: SupabaseClient<any>): Promise<SyncR
   // parse ONLY the Communication tab
   type Rec = Record<string, unknown> & { source_key: string };
   const parsed: Rec[] = [];
+  let hasBatchCol = false;
   const sheetName = wb.SheetNames.find((n) => lower(n) === DATA_TAB);
   if (!sheetName) throw new Error('The sheet has no "Communication" tab.');
   {
@@ -159,6 +162,7 @@ export async function runSheetSync(supabase: SupabaseClient<any>): Promise<SyncR
     if (idx.university < 0 || idx.publish_at < 0) {
       throw new Error("The Communication tab is missing its University or Publish At column.");
     }
+    hasBatchCol = idx.batch >= 0;
 
     for (let r = hi + 1; r < grid.length; r++) {
       const row = grid[r];
@@ -190,7 +194,10 @@ export async function runSheetSync(supabase: SupabaseClient<any>): Promise<SyncR
         source_row: r + 1,
         source_gid: gidByTab[sheetName] ?? null,
         origin: "sheet",
+        // identity key unchanged — batches are deliberately NOT part of it
         source_key: createHash("sha1").update([uniRaw, publish_at, channel, content_type, (msg || "").slice(0, 120)].join("|")).digest("hex"),
+        // only when the sheet has a Batch column (otherwise the key is absent and nothing changes)
+        ...(hasBatchCol ? { batches: (() => { const b = parseBatches(row[idx.batch]); return b.length ? b : null; })() } : {}),
       };
       parsed.push(rec);
     }
@@ -209,10 +216,12 @@ export async function runSheetSync(supabase: SupabaseClient<any>): Promise<SyncR
 
   // classify: insert (new / was-UI), update (sheet changed an outcome)
   const toInsert: Rec[] = [];
-  const toUpdate: { key: string; patch: Partial<Record<OutcomeCol, unknown>> }[] = [];
-  const toRemember: { key: string; o: Outcome }[] = [];
+  const toUpdate: { key: string; patch: Record<string, unknown> }[] = [];
+  const toRemember: { key: string; o: Outcome; b: string[] }[] = [];
   const uiDupKeys: string[] = [];
   let preserved = 0;
+  let statusUpdates = 0;
+  let batchUpdates = 0;
   for (const r of unique) {
     const key = r.source_key;
     const sheetNow: Outcome = {
@@ -220,16 +229,27 @@ export async function runSheetSync(supabase: SupabaseClient<any>): Promise<SyncR
       a: (r.actual_publish_date as string | null) ?? null,
       i: (r.issue_blocker as string | null) ?? null,
     };
+    const sheetB = (r.batches as string[] | null | undefined) ?? []; // only meaningful when hasBatchCol
     const st = stateMap[key];
-    if (!st) { toInsert.push(r); toRemember.push({ key, o: sheetNow }); continue; }
-    if (st.o === "ui") { uiDupKeys.push(key); toInsert.push(r); toRemember.push({ key, o: sheetNow }); continue; }
+    if (!st) { toInsert.push(r); toRemember.push({ key, o: sheetNow, b: sheetB }); continue; }
+    if (st.o === "ui") { uiDupKeys.push(key); toInsert.push(r); toRemember.push({ key, o: sheetNow, b: sheetB }); continue; }
 
     const current: Outcome = { s: st.s, a: st.a, i: st.i };
     const lastSeen: Outcome | null = st.seen ? { s: st.ss ?? "", a: st.sa ?? null, i: st.si ?? null } : null;
     const { patch, kept } = outcomePatch(sheetNow, current, lastSeen);
-    if (patch) toUpdate.push({ key, patch });
+    const rowPatch: Record<string, unknown> = { ...(patch ?? {}) };
+    if (patch) statusUpdates++;
     if (kept) preserved++;
-    if (!lastSeen || !sameOutcome(sheetNow, lastSeen)) toRemember.push({ key, o: sheetNow });
+    let remember = !lastSeen || !sameOutcome(sheetNow, lastSeen);
+
+    if (hasBatchCol) {
+      const bp = batchPatch(sheetB, st.b ?? null, st.sb ?? null);
+      if (bp.apply) { rowPatch.batches = sheetB.length ? sheetB : null; batchUpdates++; }
+      if (bp.kept) preserved++;
+      if (bp.remember) remember = true;
+    }
+    if (Object.keys(rowPatch).length) toUpdate.push({ key, patch: rowPatch });
+    if (remember) toRemember.push({ key, o: sheetNow, b: sheetB });
   }
 
   // Sheet wins: drop UI duplicates first
@@ -247,25 +267,43 @@ export async function runSheetSync(supabase: SupabaseClient<any>): Promise<SyncR
     inserted += data?.length ?? 0;
   }
 
-  // apply outcome updates — only the fields the sheet changed
-  let updated = 0;
+  // apply outcome (+ batch) updates — only the fields the sheet changed
   for (const u of toUpdate) {
     const { error } = await supabase.from("tasks").update(u.patch).eq("source_key", u.key);
     if (error) throw new Error(error.message);
-    updated++;
   }
 
-  // remember what the sheet showed this run (after the tasks exist — FK)
+  // remember what the sheet showed this run (after the tasks exist — FK). Batches are only
+  // remembered when the sheet has a Batch column; otherwise that memory is left untouched.
   for (let i = 0; i < toRemember.length; i += 500) {
     const seenAt = new Date().toISOString();
     const chunk = toRemember.slice(i, i + 500).map((x) => ({
       source_key: x.key, status: x.o.s, actual: x.o.a, issue: x.o.i, seen_at: seenAt,
+      ...(hasBatchCol ? { batches: x.b } : {}),
     }));
     const { error } = await supabase.from("task_sheet_state").upsert(chunk, { onConflict: "source_key" });
     if (error) throw new Error(error.message);
   }
 
-  return { inserted, updated, created, preserved, scanned: unique.length, skipped: unique.length - toInsert.length - updated };
+  return {
+    inserted, updated: statusUpdates, batches: batchUpdates, created, preserved,
+    scanned: unique.length, skipped: unique.length - toInsert.length - toUpdate.length,
+  };
+}
+
+/**
+ * Batches (only when the sheet has a Batch column). Same idea as the outcome merge:
+ *  • First time the sheet shows a value for a row (no memory): apply it only if the cell isn't
+ *    empty — an empty cell never wipes batches set in the app.
+ *  • After that: apply the sheet's value only when the SHEET changed since last run; an
+ *    in-app edit is kept while the sheet stays unchanged.
+ */
+export function batchPatch(sheetNow: string[], current: string[] | null, lastSeen: string[] | null) {
+  const remember = lastSeen === null || !sameBatches(sheetNow, lastSeen);
+  if (sameBatches(sheetNow, current)) return { apply: false, kept: false, remember };
+  if (lastSeen === null) return { apply: sheetNow.length > 0, kept: sheetNow.length === 0 && (current?.length ?? 0) > 0, remember };
+  if (!sameBatches(sheetNow, lastSeen)) return { apply: true, kept: false, remember };
+  return { apply: false, kept: true, remember };
 }
 
 // ── Three-way outcome merge ──────────────────────────────────────────────────
@@ -274,6 +312,8 @@ export type Outcome = { s: string; a: string | null; i: string | null };
 type SyncRowState = {
   o: string; s: string; a: string | null; i: string | null;
   seen?: boolean; ss?: string | null; sa?: string | null; si?: string | null;
+  b?: string[] | null;  // current batches on the task (0035)
+  sb?: string[] | null; // batches the sheet last showed (null = never seen)
 };
 
 const sameTime = (a: string | null, b: string | null) =>
@@ -309,6 +349,7 @@ export function describeSync(r: SyncResult): string {
   const parts: string[] = [];
   if (r.inserted) parts.push(`${r.inserted} new`);
   if (r.updated) parts.push(`${r.updated} status update${r.updated === 1 ? "" : "s"}`);
+  if (r.batches) parts.push(`${r.batches} batch update${r.batches === 1 ? "" : "s"}`);
   if (r.created) parts.push(`${r.created} new universit${r.created === 1 ? "y" : "ies"}`);
   const tail = r.preserved ? ` · ${r.preserved} in-app update${r.preserved === 1 ? "" : "s"} kept` : "";
   return parts.length

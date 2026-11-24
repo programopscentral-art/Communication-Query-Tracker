@@ -4,7 +4,7 @@ import { requireUniversityAccess } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { fmtIST } from "@/lib/format";
 import { istWindow, isViewKey, type ViewKey } from "@/lib/time";
-import { StatusBadge, PriorityBadge } from "@/components/Badges";
+import { StatusBadge, PriorityBadge, BatchTag } from "@/components/Badges";
 import { Reveal } from "@/components/ui/Reveal";
 import { ViewTabs } from "@/components/ViewTabs";
 import { ReminderPrefs } from "@/components/ReminderPrefs";
@@ -23,6 +23,7 @@ type Task = {
   execution_status: string;
   source_gid: string | null;
   source_row: number | null;
+  batches: string[] | null;
 };
 
 export default async function UniversityBoard({
@@ -48,7 +49,7 @@ export default async function UniversityBoard({
   const { gte, lt } = istWindow(view);
   let q = supabase
     .from("tasks")
-    .select("id, team, update_type, category, priority, channel, content_type, publish_at, execution_status, source_gid, source_row")
+    .select("id, team, update_type, category, priority, channel, content_type, publish_at, execution_status, source_gid, source_row, batches")
     .eq("university_id", uni.id)
     .order("publish_at", { ascending: view !== "yesterday", nullsFirst: false });
   if (gte) q = q.gte("publish_at", gte);
@@ -125,8 +126,9 @@ export default async function UniversityBoard({
                           {[t.channel, t.content_type].filter(Boolean).join(" · ") || "Task"}
                         </span>
                       </div>
-                      <p className="mt-1 truncate text-xs text-muted">
-                        {[t.team, t.update_type, t.category].filter(Boolean).join(" / ")}
+                      <p className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted">
+                        <span className="truncate">{[t.team, t.update_type, t.category].filter(Boolean).join(" / ")}</span>
+                        <BatchTag batches={t.batches} />
                       </p>
                     </div>
                     <div className="ml-3 shrink-0 text-right">

@@ -7,6 +7,7 @@ import { utcToIstLocalInput } from "@/lib/format";
 import { Reveal } from "@/components/ui/Reveal";
 import { DynamicSelect, type Opt } from "@/components/DynamicSelect";
 import { MessageField } from "@/components/MessageField";
+import { BatchMultiSelect } from "@/components/BatchMultiSelect";
 
 async function refOpts(supabase: Awaited<ReturnType<typeof createClient>>, table: string): Promise<Opt[]> {
   const { data } = await supabase.from(table).select("value").order("sort_order").order("value");
@@ -19,7 +20,7 @@ export default async function EditTask({ params }: { params: Promise<{ code: str
   if (!isFullAdmin(await requireAdmin())) redirect(`/u/${code}/task/${id}`);
   const supabase = await createClient();
 
-  const [{ data: task }, team, updateType, category, priority, channel, contentType, audience, { data: unis }] =
+  const [{ data: task }, team, updateType, category, priority, channel, contentType, audience, { data: unis }, batches] =
     await Promise.all([
       supabase.from("tasks").select("*").eq("id", id).single(),
       refOpts(supabase, "ref_team"),
@@ -30,6 +31,7 @@ export default async function EditTask({ params }: { params: Promise<{ code: str
       refOpts(supabase, "ref_content_type"),
       refOpts(supabase, "ref_target_audience"),
       supabase.from("universities").select("id, name").order("name"),
+      refOpts(supabase, "ref_batch"),
     ]);
   if (!task) notFound();
   const uniOpts: Opt[] = (unis ?? []).map((u) => ({ value: u.id as string, label: u.name as string }));
@@ -56,6 +58,11 @@ export default async function EditTask({ params }: { params: Promise<{ code: str
             <Field label="Channel"><DynamicSelect name="channel" kind="channel" options={channel} defaultValue={task.channel ?? ""} /></Field>
             <Field label="Content Type"><DynamicSelect name="content_type" kind="content_type" options={contentType} defaultValue={task.content_type ?? ""} /></Field>
             <Field label="Target Audience"><DynamicSelect name="target_audience" kind="target_audience" options={audience} defaultValue={task.target_audience ?? ""} /></Field>
+            <div className="sm:col-span-2">
+              <Field label="Batches (optional)">
+                <BatchMultiSelect options={batches} defaultValue={task.batches as string[] | null} />
+              </Field>
+            </div>
           </div>
 
           <Field label="Message / Content"><MessageField name="message_content" defaultValue={task.message_content ?? ""} /></Field>
