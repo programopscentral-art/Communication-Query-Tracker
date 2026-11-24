@@ -36,9 +36,14 @@ export const REPORT_FIELDS: FieldDef[] = [
   { key: "recording_link", label: "Event recording (if online)", kind: "link" },
 ];
 
-/** The 7 fields that make a report "complete" (mirrors events.report_filled). */
+/** The event description is written by the admin (New event / event page) and is read-only for staff.
+ *  It stays in REPORT_FIELDS so the sheet sync keeps carrying it, but staff forms use STAFF_REPORT_FIELDS. */
+export const DESCRIPTION_FIELD: FieldDef = REPORT_FIELDS.find((f) => f.key === "description")!;
+export const STAFF_REPORT_FIELDS: FieldDef[] = REPORT_FIELDS.filter((f) => f.key !== "description");
+
+/** The 6 fields that make a report "complete" (mirrors events.report_filled — migration 0033). */
 export const REQUIRED_REPORT_KEYS = [
-  "description", "registrations", "participants", "feedback", "highlights", "improvements", "photos_link",
+  "registrations", "participants", "feedback", "highlights", "improvements", "photos_link",
 ] as const;
 export const REPORT_TOTAL = REQUIRED_REPORT_KEYS.length;
 

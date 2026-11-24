@@ -4,7 +4,7 @@ import { istDateISO } from "@/lib/time";
 import { fmtEventDate, REPORT_TOTAL } from "@/lib/events";
 
 // Reminders for pending event reports.
-//  • DUE: report_filled < 7 and the event's last day is ≥ `after` days ago.
+//  • DUE: report_filled < REPORT_TOTAL (6) and the event's last day is ≥ `after` days ago.
 //  • ESCALATED ("overdue" stage): ≥ `escalate` days ago.
 //  • Only events whose last day is within the last `lookback` days (no backlog spam).
 //  • One row per (event, stage, staff member) in event_nudges — the unique key

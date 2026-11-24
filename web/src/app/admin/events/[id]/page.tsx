@@ -7,7 +7,7 @@ import { ViewInSheet } from "@/components/ViewInSheet";
 import { ReportBadge, ReportMeter, DetailsCard, EventWhen } from "@/components/events/EventBits";
 import { EventDetailsForm, EventReportForm, DeleteEventButton } from "@/components/events/EventForms";
 import { loadEventOptions } from "@/lib/eventOptions";
-import { periodLabel } from "@/lib/events";
+import { periodLabel, DESCRIPTION_FIELD } from "@/lib/events";
 import { fmtIST } from "@/lib/format";
 
 export default async function AdminEvent({
@@ -84,6 +84,10 @@ export default async function AdminEvent({
         ) : (
           <div className="card space-y-4 p-6">
             <DetailsCard event={ev} universityName={uni?.name} />
+            <div className="border-t border-line pt-3">
+              <p className="font-ui text-[10px] uppercase tracking-wider text-muted">{DESCRIPTION_FIELD.label}</p>
+              <p className="mt-0.5 whitespace-pre-line break-words text-sm text-ink">{ev.description || "—"}</p>
+            </div>
             {(ev.zoho_status || ev.admin_comments) && (
               <p className="border-t border-line pt-3 font-ui text-sm text-muted">
                 {ev.zoho_status && <>Loaded to Zoho: <b className="text-ink">{ev.zoho_status}</b>. </>}

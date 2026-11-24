@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { periodLabel } from "@/lib/events";
+import { periodLabel, REPORT_TOTAL } from "@/lib/events";
 import { istDateISO } from "@/lib/time";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,7 +70,7 @@ export async function loadOverdueCutoff(supabase: DB): Promise<string> {
 }
 
 export function isOverdue(e: { report_filled: number; event_last_day: string | null; sheet_missing_since?: string | null }, cutoff: string) {
-  return e.report_filled < 7 && !!e.event_last_day && e.event_last_day <= cutoff && !e.sheet_missing_since;
+  return e.report_filled < REPORT_TOTAL && !!e.event_last_day && e.event_last_day <= cutoff && !e.sheet_missing_since;
 }
 
 export function sumStats(rows: MonthStat[]) {
@@ -124,11 +124,11 @@ export function applyEventFilters<Q extends { eq: any; gt: any; lt: any; gte: an
   if (f.month && f.month !== "all") q = q.eq("period", `${f.month}-01`);
   if (f.universityId) q = q.eq("university_id", f.universityId);
   if (f.status === "pending") q = q.eq("report_filled", 0);
-  if (f.status === "partial") q = q.gt("report_filled", 0).lt("report_filled", 7);
-  if (f.status === "complete") q = q.gte("report_filled", 7);
-  if (f.status === "open") q = q.lt("report_filled", 7);
+  if (f.status === "partial") q = q.gt("report_filled", 0).lt("report_filled", REPORT_TOTAL);
+  if (f.status === "complete") q = q.gte("report_filled", REPORT_TOTAL);
+  if (f.status === "open") q = q.lt("report_filled", REPORT_TOTAL);
   if (f.status === "overdue" && f.overdueCutoff) {
-    q = q.lt("report_filled", 7).lte("event_last_day", f.overdueCutoff).is("sheet_missing_since", null);
+    q = q.lt("report_filled", REPORT_TOTAL).lte("event_last_day", f.overdueCutoff).is("sheet_missing_since", null);
   }
   if (f.zoho === "loaded") q = q.or("zoho_status.ilike.yes,zoho_status.ilike.done");
   if (f.zoho === "pending") q = q.or("zoho_status.is.null,and(zoho_status.not.ilike.yes,zoho_status.not.ilike.done)");

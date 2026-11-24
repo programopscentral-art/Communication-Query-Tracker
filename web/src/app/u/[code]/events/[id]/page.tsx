@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/ui/Reveal";
 import { ReportBadge, ReportMeter, DetailsCard, EventWhen } from "@/components/events/EventBits";
 import { EventReportForm } from "@/components/events/EventForms";
-import { periodLabel } from "@/lib/events";
+import { periodLabel, REPORT_TOTAL, DESCRIPTION_FIELD } from "@/lib/events";
 import { fmtIST } from "@/lib/format";
 
 export default async function UniversityEvent({ params }: { params: Promise<{ code: string; id: string }> }) {
@@ -50,9 +50,18 @@ export default async function UniversityEvent({ params }: { params: Promise<{ co
       <Reveal delay={0.08} className="mt-8">
         <h2 className="mb-1 font-ui text-sm font-semibold text-ink">Your event report</h2>
         <p className="mb-3 font-ui text-xs text-muted">
-          Fill these after the event. The 7 key fields (description, registrations, participants, feedback, highlights,
+          Fill these after the event. The {REPORT_TOTAL} key fields (registrations, participants, feedback, highlights,
           improvements, photos) make the report complete.
         </p>
+        {/* Read-only: written by the Student Engagement team. */}
+        <div className="card mb-4 p-6">
+          <p className="font-ui text-xs font-semibold uppercase tracking-wider text-muted">
+            {DESCRIPTION_FIELD.label} · from the Student Engagement team
+          </p>
+          <p className="mt-2 whitespace-pre-line break-words text-sm text-ink">
+            {ev.description || <span className="text-muted">Not added yet.</span>}
+          </p>
+        </div>
         <EventReportForm event={ev} canEdit={canEdit} />
       </Reveal>
     </div>

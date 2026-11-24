@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin, requireAppUser, requireUniversityAccess, isFullAdmin, READ_ONLY_MESSAGE } from "@/lib/auth";
 import { runEventSync, describeEventSync, recordEventSyncStatus } from "@/lib/eventSync";
-import { DETAIL_FIELDS, TRACKING_FIELDS, REPORT_FIELDS } from "@/lib/events";
+import { DETAIL_FIELDS, TRACKING_FIELDS, STAFF_REPORT_FIELDS, REPORT_TOTAL } from "@/lib/events";
 import { runEventNudges, describeNudges, recordNudgeRun, loadNudgeSettings } from "@/lib/eventNudges";
 
 // Event Reports actions. All return a message state (useActionState) instead of
@@ -55,10 +55,12 @@ export async function createEvents(_prev: EventFormState, fd: FormData): Promise
   const title = s(fd, "title");
   const date = s(fd, "event_date");
   const end = s(fd, "event_end_date");
+  const description = s(fd, "description");
   if (!uniIds.length) return err("Pick at least one university.");
   if (!title) return err("Give the event a title.");
   if (!isDate(date)) return err("Pick the event date.");
   if (end && (!isDate(end) || end < date)) return err("The end date must be on or after the start date.");
+  if (!description) return err("Write the event description.");
 
   const base: Record<string, unknown> = {
     origin: "ui",
@@ -67,6 +69,7 @@ export async function createEvents(_prev: EventFormState, fd: FormData): Promise
     event_end_date: end || null,
     event_date_text: end ? `${toSheetDate(date)} - ${toSheetDate(end)}` : toSheetDate(date),
     period: `${date.slice(0, 7)}-01`,
+    description, // same text for every selected university
     created_by: me.id,
     updated_by: me.id,
   };
@@ -99,7 +102,7 @@ export async function updateEventDetails(_prev: EventFormState, fd: FormData): P
   const { data: cur } = await supabase.from("events").select("event_date, event_end_date, university_id").eq("id", id).single();
   if (!cur) return err("This event no longer exists.");
 
-  const patch: Record<string, unknown> = { title };
+  const patch: Record<string, unknown> = { title, description: orNull(s(fd, "description")) };
   for (const f of [...DETAIL_FIELDS, ...TRACKING_FIELDS]) patch[f.key] = orNull(s(fd, f.key));
   // Only touch the date / campus if they actually changed (keeps the sheet's wording otherwise).
   if ((date || null) !== cur.event_date || (end || null) !== cur.event_end_date) {
@@ -133,13 +136,14 @@ export async function saveEventReport(_prev: EventFormState, fd: FormData): Prom
   if (!access.canEdit) return err(READ_ONLY_MESSAGE);
 
   const patch: Record<string, unknown> = {};
-  for (const f of REPORT_FIELDS) patch[f.key] = orNull(s(fd, f.key));
+  // The description is the admin's (read-only here), so it's never part of the staff save.
+  for (const f of STAFF_REPORT_FIELDS) patch[f.key] = orNull(s(fd, f.key));
   const { data, error } = await supabase.from("events").update(patch).eq("id", id).select("report_filled");
   if (error) return err(`Couldn't save the report: ${error.message}`);
   if (!data?.length) return err("You can't update this event's report.");
   revalidateEvents(code);
   const filled = data[0].report_filled as number;
-  return ok(filled >= 7 ? "Report saved — complete ✓" : `Report saved (${filled}/7 key fields filled).`);
+  return ok(filled >= REPORT_TOTAL ? "Report saved — complete ✓" : `Report saved (${filled}/${REPORT_TOTAL} key fields filled).`);
 }
 
 // ── Delete (full admin) ──────────────────────────────────────────────────────

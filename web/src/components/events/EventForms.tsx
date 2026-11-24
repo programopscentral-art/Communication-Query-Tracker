@@ -14,7 +14,7 @@ import {
   type EventFormState,
   type EventSyncState,
 } from "@/app/events-actions";
-import { DETAIL_FIELDS, TRACKING_FIELDS, REPORT_FIELDS, type FieldDef } from "@/lib/events";
+import { DETAIL_FIELDS, TRACKING_FIELDS, STAFF_REPORT_FIELDS, DESCRIPTION_FIELD, type FieldDef } from "@/lib/events";
 import { UniversityMultiSelect } from "@/components/UniversityMultiSelect";
 
 type Opt = { value: string; label: string };
@@ -128,6 +128,18 @@ export function EventDetailsForm({
             <FieldInput f={f} value={event?.[f.key]} options={options[f.key]} />
           </Label>
         ))}
+        {/* Written by the admin; staff see it read-only. Required when creating (same text for every university). */}
+        <div className="sm:col-span-2">
+          <Label f={{ ...DESCRIPTION_FIELD, label: mode === "create" ? `${DESCRIPTION_FIELD.label} *` : DESCRIPTION_FIELD.label }}>
+            <textarea
+              name="description"
+              required={mode === "create"}
+              defaultValue={event?.description ?? ""}
+              rows={3}
+              className="filter-input w-full"
+            />
+          </Label>
+        </div>
       </div>
       <div className="grid gap-4 rounded-xl border border-dashed border-line bg-canvas p-4 sm:grid-cols-2">
         {/* "Loaded to Zoho" is set later (event page / bulk bar), not when creating. */}
@@ -148,7 +160,7 @@ export function EventDetailsForm({
       </button>
       {mode === "create" && (
         <p className="font-ui text-xs text-muted">
-          The report fields (description, participants, feedback, photos…) are filled by the university&apos;s staff.
+          The report fields (registrations, participants, feedback, photos…) are filled by the university&apos;s staff.
         </p>
       )}
     </form>
@@ -162,7 +174,7 @@ export function EventReportForm({ event, canEdit }: { event: Vals & { id: string
     <form onSubmit={keepValues(action)} className="card space-y-5 p-6 sm:p-8">
       <input type="hidden" name="id" value={event.id} />
       <fieldset disabled={!canEdit} className="grid gap-4 sm:grid-cols-2">
-        {REPORT_FIELDS.map((f) => (
+        {STAFF_REPORT_FIELDS.map((f) => (
           <div key={f.key} className={f.kind === "textarea" ? "sm:col-span-2" : ""}>
             <Label f={f}>
               <FieldInput f={f} value={event[f.key]} />
