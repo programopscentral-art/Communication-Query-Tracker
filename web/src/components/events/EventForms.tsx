@@ -130,7 +130,8 @@ export function EventDetailsForm({
         ))}
       </div>
       <div className="grid gap-4 rounded-xl border border-dashed border-line bg-canvas p-4 sm:grid-cols-2">
-        {TRACKING_FIELDS.map((f) => (
+        {/* "Loaded to Zoho" is set later (event page / bulk bar), not when creating. */}
+        {TRACKING_FIELDS.filter((f) => mode === "edit" || f.key !== "zoho_status").map((f) => (
           <div key={f.key} className={f.kind === "textarea" ? "sm:col-span-2" : ""}>
             <Label f={f}>
               <FieldInput f={f} value={event?.[f.key]} options={options[f.key]} />
