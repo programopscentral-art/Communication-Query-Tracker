@@ -12,6 +12,8 @@ import { ViewInSheet } from "@/components/ViewInSheet";
 import { DeleteTaskButton } from "@/components/DeleteTaskButton";
 
 const STATUS_OPTIONS = ["pending", "in_progress", "published", "blocked", "restricted"];
+/** University staff pick one final status; once it's no longer pending it's locked (DB-enforced, migration 0034). */
+const BOA_STATUS_OPTIONS = ["published", "blocked", "restricted"];
 
 export default async function TaskDetail({ params }: { params: Promise<{ code: string; id: string }> }) {
   const { code, id } = await params;
@@ -30,6 +32,12 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
   const uni = task.universities as { name: string; code: string } | null;
   // The task must be viewed under its own university (edit rights are per-university).
   if (uni && uni.code !== code) redirect(`/u/${uni.code}/task/${id}`);
+
+  // Full admins may set any status at any time. University staff choose Published / Blocked /
+  // Restricted once; after the status leaves "pending" it's locked for them.
+  const isStaff = canRespond && !canAdminEdit;
+  const locked = isStaff && task.execution_status !== "pending";
+  const statusOptions = !isStaff ? STATUS_OPTIONS : locked ? [task.execution_status as string] : BOA_STATUS_OPTIONS;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
@@ -109,24 +117,41 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
           <input type="hidden" name="code" value={code} />
           <h2 className="font-ui text-sm font-semibold text-ink">Update status</h2>
 
-          <label className="mt-4 block font-ui text-[10px] uppercase tracking-wider text-muted">
-            Execution status
-          </label>
-          <select name="execution_status" defaultValue={task.execution_status} className="filter-input mt-1 w-full">
-            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <fieldset disabled={locked} className="disabled:opacity-60">
+            <label className="mt-4 block font-ui text-[10px] uppercase tracking-wider text-muted">
+              Execution status
+            </label>
+            <select
+              name="execution_status"
+              defaultValue={isStaff && !locked ? "" : task.execution_status}
+              required
+              className="filter-input mt-1 w-full"
+            >
+              {isStaff && !locked && <option value="" disabled>Choose a status…</option>}
+              {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {isStaff && !locked && (
+              <p className="mt-1 font-ui text-xs text-warn">Once saved, the status can only be changed by an admin.</p>
+            )}
 
-          <label className="mt-4 block font-ui text-[10px] uppercase tracking-wider text-muted">
-            Issue / Blocker (optional)
-          </label>
-          <textarea name="issue_blocker" rows={2} defaultValue={task.issue_blocker ?? ""} className="filter-input mt-1 w-full" />
+            <label className="mt-4 block font-ui text-[10px] uppercase tracking-wider text-muted">
+              Issue / Blocker (optional)
+            </label>
+            <textarea name="issue_blocker" rows={2} defaultValue={task.issue_blocker ?? ""} className="filter-input mt-1 w-full" />
 
-          <button className="mt-5 rounded-full bg-accent px-5 py-2.5 font-ui text-sm font-semibold text-white shadow-[var(--shadow-glow)] transition-all hover:-translate-y-0.5">
-            Save update
-          </button>
-          <p className="mt-2 text-xs text-muted">
-            Marking <b className="text-ink">published</b> stamps the actual publish time automatically.
-          </p>
+            <button className="mt-5 rounded-full bg-accent px-5 py-2.5 font-ui text-sm font-semibold text-white shadow-[var(--shadow-glow)] transition-all enabled:hover:-translate-y-0.5">
+              Save update
+            </button>
+          </fieldset>
+          {locked ? (
+            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 font-ui text-sm text-amber-900">
+              Status is locked. Contact an admin to change it.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-muted">
+              Marking <b className="text-ink">published</b> stamps the actual publish time automatically.
+            </p>
+          )}
         </form>
       </Reveal>
 

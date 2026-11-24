@@ -60,7 +60,15 @@ export async function updateTask(formData: FormData) {
   }
 
   const { error } = await supabase.from("tasks").update(patch).eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Locked for staff (migration 0034) — e.g. a stale tab. Reload the task page, which shows
+    // "Status is locked…", instead of the error page.
+    if (error.code === "42501") {
+      revalidatePath(`/u/${code}/task/${id}`);
+      redirect(`/u/${code}/task/${id}`);
+    }
+    throw new Error(error.message);
+  }
 
   revalidatePath(`/u/${code}/task/${id}`);
   revalidatePath(`/u/${code}`);
