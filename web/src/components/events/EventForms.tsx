@@ -16,6 +16,7 @@ import {
 } from "@/app/events-actions";
 import { DETAIL_FIELDS, TRACKING_FIELDS, STAFF_REPORT_FIELDS, DESCRIPTION_FIELD, type FieldDef } from "@/lib/events";
 import { UniversityMultiSelect } from "@/components/UniversityMultiSelect";
+import { BatchMultiSelect } from "@/components/BatchMultiSelect";
 
 type Opt = { value: string; label: string };
 type Vals = Record<string, string | null | undefined>;
@@ -84,11 +85,14 @@ export function EventDetailsForm({
   event,
   universities,
   options,
+  batchOptions,
 }: {
   mode: "create" | "edit";
   event?: Vals & { id: string };
   universities: Opt[];
   options: Record<string, string[]>;
+  /** The shared ref_batch list (same as ＋New posts). */
+  batchOptions: Opt[];
 }) {
   const [state, action, pending] = useActionState<EventFormState, FormData>(
     mode === "create" ? createEvents : updateEventDetails,
@@ -116,6 +120,13 @@ export function EventDetailsForm({
               </select>
             </Label>
           )}
+        </div>
+        <div className="sm:col-span-2">
+          {/* not a <label>: the picker has its own checkboxes and buttons */}
+          <span className="mb-1 block font-ui text-[10px] uppercase tracking-wider text-muted">
+            {mode === "create" ? "Batches (optional — every selected university gets the same batches)" : "Batches (optional)"}
+          </span>
+          <BatchMultiSelect options={batchOptions} defaultValue={(event?.batches as unknown as string[] | null | undefined) ?? null} />
         </div>
         <Label f={{ label: mode === "create" ? "Event date *" : "Event date" }}>
           <input type="date" name="event_date" required={mode === "create"} defaultValue={event?.event_date ?? ""} className="filter-input w-full" />

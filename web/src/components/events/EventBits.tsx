@@ -7,6 +7,7 @@ import {
   fmtEventDate,
   isUrl,
 } from "@/lib/events";
+import { formatBatches } from "@/lib/batches";
 
 export function ReportBadge({ filled }: { filled: number | null | undefined }) {
   const st = reportStatus(filled);
@@ -55,6 +56,7 @@ export function DetailsCard({ event, universityName }: { event: Record<string, u
     <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
       <Item label="University / campus" value={universityName ?? v("university_raw")} />
       <Item label="Event date" value={<EventWhen date={v("event_date")} end={v("event_end_date")} text={v("event_date_text")} />} />
+      <Item label="Batches" value={formatBatches(event.batches as string[] | null | undefined)} />
       {DETAIL_FIELDS.map((f) => <Item key={f.key} label={f.label} value={v(f.key)} />)}
     </dl>
   );

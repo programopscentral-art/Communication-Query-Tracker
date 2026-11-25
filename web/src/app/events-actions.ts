@@ -7,6 +7,7 @@ import { requireAdmin, requireAppUser, requireUniversityAccess, isFullAdmin, REA
 import { runEventSync, describeEventSync, recordEventSyncStatus } from "@/lib/eventSync";
 import { DETAIL_FIELDS, TRACKING_FIELDS, STAFF_REPORT_FIELDS, REPORT_TOTAL } from "@/lib/events";
 import { runEventNudges, describeNudges, recordNudgeRun, loadNudgeSettings } from "@/lib/eventNudges";
+import { batchesFromForm, sameBatches } from "@/lib/batches";
 
 // Event Reports actions. All return a message state (useActionState) instead of
 // throwing, so problems show inline — never the error page.
@@ -70,6 +71,7 @@ export async function createEvents(_prev: EventFormState, fd: FormData): Promise
     event_date_text: end ? `${toSheetDate(date)} - ${toSheetDate(end)}` : toSheetDate(date),
     period: `${date.slice(0, 7)}-01`,
     description, // same text for every selected university
+    batches: batchesFromForm(fd.getAll("batches")), // optional; same batches for every selected university
     created_by: me.id,
     updated_by: me.id,
   };
@@ -99,10 +101,13 @@ export async function updateEventDetails(_prev: EventFormState, fd: FormData): P
   if (date && !isDate(date)) return err("That event date isn't valid.");
   if (end && (!date || !isDate(end) || end < date)) return err("The end date must be on or after the start date.");
 
-  const { data: cur } = await supabase.from("events").select("event_date, event_end_date, university_id").eq("id", id).single();
+  const { data: cur } = await supabase.from("events").select("event_date, event_end_date, university_id, batches").eq("id", id).single();
   if (!cur) return err("This event no longer exists.");
 
   const patch: Record<string, unknown> = { title, description: orNull(s(fd, "description")) };
+  // The picker is always on this form (none chosen = not set). Only write when the set changed.
+  const batches = batchesFromForm(fd.getAll("batches"));
+  if (!sameBatches(batches, cur.batches as string[] | null)) patch.batches = batches;
   for (const f of [...DETAIL_FIELDS, ...TRACKING_FIELDS]) patch[f.key] = orNull(s(fd, f.key));
   // Only touch the date / campus if they actually changed (keeps the sheet's wording otherwise).
   if ((date || null) !== cur.event_date || (end || null) !== cur.event_end_date) {

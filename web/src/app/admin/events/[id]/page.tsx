@@ -27,9 +27,12 @@ export default async function AdminEvent({
   const uni = ev.universities as { name: string; code: string } | null;
 
   const people = [ev.updated_by, ev.report_updated_by, ev.created_by].filter(Boolean) as string[];
-  const [{ data: unis }, options, { data: users }, { data: settings }] = await Promise.all([
+  const [{ data: unis }, options, { data: batches }, { data: users }, { data: settings }] = await Promise.all([
     supabase.from("universities").select("id, name").order("name"),
     canEdit ? loadEventOptions(supabase) : Promise.resolve({} as Record<string, string[]>),
+    canEdit
+      ? supabase.from("ref_batch").select("value").order("sort_order").order("value") // shared list (0035)
+      : Promise.resolve({ data: [] as { value: string }[] }),
     people.length ? supabase.from("app_users").select("id, full_name, email").in("id", people) : Promise.resolve({ data: [] }),
     supabase.from("app_settings").select("events_sheet_id").eq("id", 1).single(),
   ]);
@@ -80,7 +83,13 @@ export default async function AdminEvent({
       <Reveal delay={0.06} className="mt-6">
         <h2 className="mb-3 font-ui text-sm font-semibold text-ink">Event details <span className="font-normal text-muted">· Student Engagement team</span></h2>
         {canEdit ? (
-          <EventDetailsForm mode="edit" event={ev} universities={(unis ?? []).map((u) => ({ value: u.id as string, label: u.name as string }))} options={options} />
+          <EventDetailsForm
+            mode="edit"
+            event={ev}
+            universities={(unis ?? []).map((u) => ({ value: u.id as string, label: u.name as string }))}
+            options={options}
+            batchOptions={(batches ?? []).map((b) => ({ value: b.value as string, label: b.value as string }))}
+          />
         ) : (
           <div className="card space-y-4 p-6">
             <DetailsCard event={ev} universityName={uni?.name} />

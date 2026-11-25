@@ -9,10 +9,12 @@ import { loadEventOptions } from "@/lib/eventOptions";
 export default async function NewEvent() {
   const canEdit = isFullAdmin(await requireAdmin());
   const supabase = await createClient();
-  const [{ data: unis }, options] = await Promise.all([
+  const [{ data: unis }, options, { data: batches }] = await Promise.all([
     supabase.from("universities").select("id, name").order("name"),
     loadEventOptions(supabase),
+    supabase.from("ref_batch").select("value").order("sort_order").order("value"), // shared list (0035)
   ]);
+  const batchOptions = (batches ?? []).map((b) => ({ value: b.value as string, label: b.value as string }));
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -27,7 +29,7 @@ export default async function NewEvent() {
       </Reveal>
       <Reveal delay={0.06} className="mt-6">
         {canEdit ? (
-          <EventDetailsForm mode="create" universities={(unis ?? []).map((u) => ({ value: u.id as string, label: u.name as string }))} options={options} />
+          <EventDetailsForm mode="create" universities={(unis ?? []).map((u) => ({ value: u.id as string, label: u.name as string }))} options={options} batchOptions={batchOptions} />
         ) : (
           <ReadOnlyNotice what="create events" />
         )}

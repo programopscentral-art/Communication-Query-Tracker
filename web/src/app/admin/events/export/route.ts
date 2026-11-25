@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { applyEventFilters, loadOverdueCutoff } from "@/lib/eventQueries";
 import { fmtEventDate, periodLabel, reportStatus, REPORT_STATUS_LABEL, REPORT_TOTAL } from "@/lib/events";
+import { ALL_BATCHES } from "@/lib/batches";
 
 // Export the Event Reports list (current filters) as Excel or CSV — same column
 // layout as the Event Reports sheet, plus report status and a PingBoard link.
@@ -48,7 +49,15 @@ const COLUMNS: { header: string; width: number; get: (r: Row, appUrl: string) =>
   { header: `Report fields filled (of ${REPORT_TOTAL})`, width: 12, get: (r) => String(r.report_filled ?? 0) },
   { header: "Source", width: 22, get: (r) => (r.origin === "sheet" ? `Sheet · ${r.source_tab} row ${r.source_row}` : "Added in PingBoard") },
   { header: "PingBoard link", width: 40, get: (r, app) => `${app}/admin/events/${r.id}` },
+  // 0036 — always the LAST column; empty when not set
+  { header: "Batch", width: 16, get: (r) => batchCell(r.batches as string[] | null) },
 ];
+
+/** "All" · "2025, 2026" · "" (same words a sheet cell would use). */
+function batchCell(b: string[] | null | undefined): string {
+  if (!b || b.length === 0) return "";
+  return b.includes(ALL_BATCHES) ? ALL_BATCHES : [...b].sort().join(", ");
+}
 
 function str(v: unknown): string {
   return v == null ? "" : String(v);

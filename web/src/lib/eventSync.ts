@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { REPORT_FIELDS } from "@/lib/events";
+import { ALL_BATCHES, parseBatches, sameBatches } from "@/lib/batches";
 
 // Event Reports: Google Sheet → app sync. READ-ONLY on the sheet (xlsx export).
 //
@@ -62,6 +63,7 @@ function fieldForHeader(raw: string): string | null {
   if (s("event recording")) return "recording_link";
   if (s("loaded to zoho")) return "zoho_status";
   if (s("comment")) return "admin_comments";
+  if (/^batch(es)?\b/.test(x)) return "batches"; // OPTIONAL (0036) — tabs without it sync exactly as before
   return null;
 }
 
@@ -151,6 +153,8 @@ export type SheetEvent = {
   eventEndDate: string | null;
   fpBase: string;
   fp: string;
+  /** null = this tab has no Batch column; [] = the cell is empty. Never part of the identity. */
+  batches: string[] | null;
 };
 
 export function parseEventWorkbook(wb: XLSX.WorkBook, gidByTab: Record<string, string>) {
@@ -191,7 +195,7 @@ export function parseEventWorkbook(wb: XLSX.WorkBook, gidByTab: Record<string, s
     tabsRead.push(tab);
 
     const { m: tabM, y: tabY } = tabMonth(tab);
-    const rows: { r: number; vals: Vals; key: string | null; dateCellIso: string | null }[] = [];
+    const rows: { r: number; vals: Vals; key: string | null; dateCellIso: string | null; batches: string[] | null }[] = [];
     for (let r = hi + 1; r <= rg.e.r; r++) {
       const get = (f: string) => (cols[f] === undefined ? null : text(cellAt(r, cols[f])));
       const vals: Vals = {};
@@ -201,7 +205,8 @@ export function parseEventWorkbook(wb: XLSX.WorkBook, gidByTab: Record<string, s
       const dc = cols.event_date_text === undefined ? undefined : cellAt(r, cols.event_date_text);
       const dateCellIso =
         dc && dc.t === "n" && typeof dc.v === "number" && dc.z && XLSX.SSF.is_date(dc.z) ? serialToIso(dc.v) : null;
-      rows.push({ r, vals, key: get("sheet_key"), dateCellIso });
+      const batches = cols.batches === undefined ? null : parseBatches(get("batches"));
+      rows.push({ r, vals, key: get("sheet_key"), dateCellIso, batches });
     }
 
     // Year for tabs without one (e.g. "Oct"): the most common year among its dates.
@@ -228,7 +233,7 @@ export function parseEventWorkbook(wb: XLSX.WorkBook, gidByTab: Record<string, s
         .digest("hex");
       out.push({
         tab, gid: gidByTab[tab] ?? null, row: x.r + 1, sheetKeyRaw: x.key, vals,
-        eventDate: parsed.start, eventEndDate: parsed.end, fpBase, fp: fpBase,
+        eventDate: parsed.start, eventEndDate: parsed.end, fpBase, fp: fpBase, batches: x.batches,
       });
     }
   }
@@ -277,6 +282,23 @@ export function mergeFields(sheet: Vals, current: Vals, lastSeen: Vals | null) {
   return { patch, kept };
 }
 
+/** Batches as remembered in sheet_seen.batches: "All" or a sorted comma list. */
+const batchesSeen = (b: string[]) => (b.includes(ALL_BATCHES) ? ALL_BATCHES : [...b].sort().join(","));
+
+/**
+ * Batches (only for tabs with a Batch column; never part of the identity).
+ *  • An empty cell never changes anything — it never wipes batches set in the app.
+ *  • A filled cell is applied the first time the sheet shows a value for the event
+ *    (no memory), and afterwards only when the SHEET changed since the last run;
+ *    an admin's edit is kept while the sheet stays unchanged.
+ * `lastSeen` = sheet_seen.batches (undefined/null = the sheet never showed one).
+ */
+export function eventBatchPatch(sheetNow: string[], current: string[] | null, lastSeen: string | null | undefined) {
+  if (sheetNow.length === 0 || sameBatches(sheetNow, current)) return { apply: false, kept: false };
+  if (!lastSeen || batchesSeen(sheetNow) !== lastSeen) return { apply: true, kept: false };
+  return { apply: false, kept: true };
+}
+
 // ── Sync ─────────────────────────────────────────────────────────────────────
 export type EventSyncResult = {
   inserted: number;
@@ -302,11 +324,13 @@ type Existing = Vals & {
   event_date: string | null;
   event_end_date: string | null;
 };
+/** The event's current batches (text[] — kept apart from the text-only merge values). */
+const currentBatches = (e: Existing) => (e as unknown as { batches: string[] | null }).batches ?? null;
 
 async function fetchAllEvents(supabase: DB): Promise<Existing[]> {
   const cols = [
     "id", "origin", "sheet_key", "fingerprint", "source_tab", "source_gid", "source_row", "sheet_seen",
-    "sheet_missing_since", "university_id", "event_date", "event_end_date", ...MERGE_KEYS,
+    "sheet_missing_since", "university_id", "event_date", "event_end_date", "batches", ...MERGE_KEYS,
   ].join(", ");
   const all: Existing[] = [];
   for (let from = 0; ; from += 1000) {
@@ -390,11 +414,15 @@ export async function runEventSync(supabase: DB): Promise<EventSyncResult> {
       hit = (bySoft.get(`${uniId}|${inc.eventDate}|${key(inc.vals.title)}`) ?? []).find((e) => !matched.has(e.id));
     }
     const seenVals: Vals = { ...inc.vals, sheet_key_raw: inc.sheetKeyRaw };
+    // Batches are remembered only when the cell has a value (no column / empty cell → no key, so
+    // sheet_seen — and the sync — stay exactly as before for tabs without a Batch column).
+    if (inc.batches?.length) seenVals.batches = batchesSeen(inc.batches);
 
     if (!hit) {
       inserts.push({
         origin: "sheet", sheet_key: k, fingerprint: inc.fp, source_tab: inc.tab, source_gid: inc.gid, source_row: inc.row,
         sheet_seen: seenVals, ...inc.vals, event_date: inc.eventDate, event_end_date: inc.eventEndDate, university_id: uniId,
+        batches: inc.batches?.length ? inc.batches : null,
       });
       if (k) keyTakenBy.set(k, "__insert__");
       continue;
@@ -408,6 +436,11 @@ export async function runEventSync(supabase: DB): Promise<EventSyncResult> {
     if ("event_date_text" in fieldPatch) { patch.event_date = inc.eventDate; patch.event_end_date = inc.eventEndDate; }
     if ("university_raw" in fieldPatch) patch.university_id = uniId;
     else if (!hit.university_id && uniId) patch.university_id = uniId; // a campus name mapped since last run
+    if (inc.batches) {
+      const bp = eventBatchPatch(inc.batches, currentBatches(hit), lastSeen?.batches);
+      if (bp.apply) patch.batches = inc.batches;
+      if (bp.kept) kept++;
+    }
     // provenance (always the sheet's current view)
     const prov: Record<string, unknown> = {
       origin: "sheet", sheet_key: k, fingerprint: inc.fp, source_tab: inc.tab, source_gid: inc.gid,
