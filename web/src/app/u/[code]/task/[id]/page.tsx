@@ -161,7 +161,7 @@ export default async function TaskDetail({ params }: { params: Promise<{ code: s
         <div className="mt-6 card p-6 sm:p-8">
           <p className="eyebrow mb-1">Manual reminder</p>
           <p className="mb-4 font-ui text-sm text-muted">
-            Push a WhatsApp reminder to this university&apos;s BOAs right now — regardless of the
+            Push a reminder to this university&apos;s BOAs right now — regardless of the
             automatic schedule.
           </p>
           <SendNowButton taskId={task.id} code={code} />

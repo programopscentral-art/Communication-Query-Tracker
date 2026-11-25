@@ -43,7 +43,7 @@ export function ReminderPrefs({
         <div>
           <p className="eyebrow mb-1">Reminder timing</p>
           <p className="font-ui text-sm font-semibold text-ink">
-            Send WhatsApp reminders before publish
+            Send reminders before publish
           </p>
         </div>
         {/* auto / manual toggle */}

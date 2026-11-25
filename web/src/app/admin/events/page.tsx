@@ -304,7 +304,7 @@ export default async function AdminEvents({ searchParams }: { searchParams: Prom
                 <b className="text-ink">{nudgeSettings.after} days</b> after the event, and again (escalated) after{" "}
                 <b className="text-ink">{nudgeSettings.escalate} days</b> — for events in the last {nudgeSettings.lookback} days.
                 Each person gets at most one reminder per stage per event.{" "}
-                They go out on WhatsApp within a minute of being queued (see the <Link href="/admin/whatsapp" className="text-accent hover:underline">WhatsApp</Link> page) — only while sending is switched on.
+                Queued reminders are delivered only while reminder sending is switched on.
               </p>
             </div>
             <span className={`rounded-full px-2.5 py-1 font-ui text-xs font-semibold ${nudgeSettings.enabled ? "bg-green-100 text-success" : "bg-line-soft text-muted"}`}>

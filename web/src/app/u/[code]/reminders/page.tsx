@@ -71,7 +71,7 @@ export default async function MyReminders({
       <Reveal>
         <p className="eyebrow mb-2">Notifications</p>
         <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">My reminders</h1>
-        <p className="mt-2 font-ui text-sm text-muted">WhatsApp reminders scheduled for you, by when they fire.</p>
+        <p className="mt-2 font-ui text-sm text-muted">Reminders scheduled for you, by when they fire.</p>
       </Reveal>
 
       <Reveal delay={0.05} className="mt-6 flex flex-wrap items-center gap-3">

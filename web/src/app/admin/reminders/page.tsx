@@ -77,7 +77,7 @@ export default async function ReminderLog({
       <Reveal>
         <p className="eyebrow mb-2">Delivery</p>
         <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-ink">Reminder log</h1>
-        <p className="mt-2 font-ui text-sm text-muted">Every WhatsApp reminder across universities, by fire time.</p>
+        <p className="mt-2 font-ui text-sm text-muted">Every reminder across universities, by fire time.</p>
       </Reveal>
 
       <Reveal delay={0.05} className="mt-6 flex flex-wrap items-center gap-3">

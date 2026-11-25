@@ -10,7 +10,7 @@ export function Footer() {
             <img src="/niat-logo.png" alt="NIAT — NxtWave of Innovation in Advanced Technologies" className="h-10 w-auto" />
             <p className="mt-3 font-ui text-sm font-semibold text-ink">PingBoard</p>
             <p className="mt-1 max-w-xs text-sm leading-relaxed text-muted">
-              WhatsApp reminders that reach every BOA on time — across every university.
+              Reminders that reach every BOA on time — across every university.
             </p>
           </div>
 
