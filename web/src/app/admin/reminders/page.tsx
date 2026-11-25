@@ -22,6 +22,7 @@ type Job = {
   skip_reason: string | null;
   error: string | null;
   delivery_status: string | null;
+  sent_via: string | null;
 };
 
 const TONE: Record<string, string> = {
@@ -53,7 +54,7 @@ export default async function ReminderLog({
 
   let q = supabase
     .from("reminder_job_details")
-    .select("job_id, status, offset_min, attempts, fire_at, publish_at, boa_name, channel, content_type, university_name, university_code, skip_reason, error, delivery_status")
+    .select("job_id, status, offset_min, attempts, fire_at, publish_at, boa_name, channel, content_type, university_name, university_code, skip_reason, error, delivery_status, sent_via")
     .order("fire_at", { ascending: true })
     .limit(300);
   if (win.gte) q = q.gte("fire_at", win.gte);
@@ -110,6 +111,7 @@ export default async function ReminderLog({
                     <td className="px-4 py-3 text-muted">{fmtIST(j.publish_at)}</td>
                     <td className="px-6 py-3 font-ui">
                       <span className={`font-semibold ${TONE[j.status] ?? ""}`}>{j.status}</span>
+                      {j.sent_via && <span className="ml-1 text-xs text-muted">· via {j.sent_via === "teams" ? "Teams" : "WhatsApp"}</span>}
                       {j.status === "sent" && j.delivery_status && j.delivery_status !== "sent" && (
                         <span className="ml-1 text-xs text-muted">· {j.delivery_status}</span>
                       )}
