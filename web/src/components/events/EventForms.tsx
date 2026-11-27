@@ -134,7 +134,8 @@ export function EventDetailsForm({
         <Label f={{ label: "End date", hint: "multi-day events" }}>
           <input type="date" name="event_end_date" defaultValue={event?.event_end_date ?? ""} className="filter-input w-full" />
         </Label>
-        {DETAIL_FIELDS.map((f) => (
+        {/* "Event coverage by" is not asked on the New event form (saved empty); it stays on the edit form. */}
+        {DETAIL_FIELDS.filter((f) => mode === "edit" || f.key !== "coverage").map((f) => (
           <Label key={f.key} f={f}>
             <FieldInput f={f} value={event?.[f.key]} options={options[f.key]} />
           </Label>
